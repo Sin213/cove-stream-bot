@@ -48,6 +48,10 @@ export class BeefwebClient {
     await this.request('/api/player/stop', 'POST');
   }
 
+  async seek(position: number): Promise<void> {
+    await this.request('/api/player', 'POST', { position });
+  }
+
   async getCurrentTrack(): Promise<TrackInfo | null> {
     const state = await this.getPlayerState();
     if (!state.activeItem || state.activeItem.index < 0) return null;

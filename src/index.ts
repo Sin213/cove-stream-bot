@@ -21,6 +21,7 @@ import { statusCommand } from './commands/status.js';
 import { searchCommand } from './commands/search.js';
 import { queueCommand } from './commands/queue.js';
 import { removeCommand } from './commands/remove.js';
+import { restartCommand } from './commands/restart.js';
 import { autonpCommand } from './commands/autonp.js';
 import { getAnnounceChannel } from './autonp/state.js';
 
@@ -41,6 +42,7 @@ registerCommand('queue', queueCommand);
 registerCommand('q', queueCommand);
 registerCommand('remove', removeCommand);
 registerCommand('rm', removeCommand);
+registerCommand('restart', restartCommand);
 registerCommand('autonp', autonpCommand);
 
 const PREFIX = '!';
