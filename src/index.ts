@@ -15,7 +15,6 @@ import { auditLog } from './security/audit.js';
 
 import { joinCommand } from './commands/join.js';
 import { leaveCommand } from './commands/leave.js';
-import { relayCommand } from './commands/relay.js';
 import { playCommand } from './commands/play.js';
 import { pauseCommand } from './commands/pause.js';
 import { nextCommand } from './commands/next.js';
@@ -39,7 +38,7 @@ import { voteskipCommand } from './commands/voteskip.js';
 
 registerCommand('join', joinCommand);
 registerCommand('leave', leaveCommand);
-registerCommand('relay', relayCommand);
+registerCommand('relay', joinCommand);
 registerCommand('play', playCommand);
 registerCommand('pause', pauseCommand);
 registerCommand('next', nextCommand);
