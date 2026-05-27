@@ -12,16 +12,27 @@ export interface QueueEntry {
 }
 
 const PERSIST_PATH = resolve(process.cwd(), 'queue.json');
+const DEBOUNCE_MS = 500;
 let _queue: QueueEntry[] = [];
+let _persistTimer: ReturnType<typeof setTimeout> | null = null;
 
 try {
   const raw = readFileSync(PERSIST_PATH, 'utf8');
   _queue = JSON.parse(raw) as QueueEntry[];
 } catch { /* first run */ }
 
-function persist(): void {
+function flushSync(): void {
   try { writeFileSync(PERSIST_PATH, JSON.stringify(_queue)); } catch { /* non-fatal */ }
 }
+
+function persist(): void {
+  if (_persistTimer) return;
+  _persistTimer = setTimeout(() => { _persistTimer = null; flushSync(); }, DEBOUNCE_MS);
+}
+
+process.on('exit', () => {
+  if (_persistTimer) { clearTimeout(_persistTimer); flushSync(); }
+});
 
 export function appendToQueue(entry: QueueEntry): void {
   _queue.push(entry);
@@ -56,18 +67,24 @@ export async function restoreQueue(beefweb: BeefwebClient, monochrome: Monochrom
     if (!playlist || playlist.itemCount > 0) return; // don't restore if playlist has content
 
     console.log(`[queue] Restoring ${_queue.length} queued track(s)…`);
+    const resolved = await Promise.allSettled(
+      _queue.map(entry => monochrome.getStreamUrl(entry.tidalId, undefined, entry.isrc)
+        .then(url => ({ entry, url })))
+    );
     let index = 0;
-    for (const entry of _queue) {
-      try {
-        const url = await monochrome.getStreamUrl(entry.tidalId, undefined, entry.isrc);
+    for (const result of resolved) {
+      if (result.status === 'rejected') {
+        const entry = _queue[index];
+        console.warn(`[queue] Failed to restore "${entry?.title}":`, result.reason instanceof Error ? result.reason.message : result.reason);
+      } else {
+        const { entry, url } = result.value;
         await beefweb.addItems(playlist.id, [url]);
         setTrackMeta(index, url, { title: entry.title, artists: entry.artists, isrc: entry.isrc });
-        index++;
-      } catch (err) {
-        console.warn(`[queue] Failed to restore "${entry.title}":`, err instanceof Error ? err.message : err);
       }
+      index++;
     }
-    console.log(`[queue] Restored ${index} track(s).`);
+    const ok = resolved.filter(r => r.status === 'fulfilled').length;
+    console.log(`[queue] Restored ${ok}/${_queue.length} track(s).`);
   } catch (err) {
     console.warn('[queue] Restore failed:', err instanceof Error ? err.message : err);
   }

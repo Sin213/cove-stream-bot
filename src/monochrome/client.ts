@@ -1,4 +1,8 @@
 import type { TrackMatch, StreamInfo } from './types.js';
+import { readFileSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
+
+const STATS_PATH = resolve(process.cwd(), 'mirror-stats.json');
 
 interface MirrorFailure {
   mirror: string;
@@ -93,6 +97,10 @@ export class MonochromeClient {
     this.baseURLs = baseURLs.map(u => u.replace(/\/$/, ''));
     this.quality = quality;
     this.qobuzBaseURLs = qobuzBaseURLs.map(u => u.replace(/\/$/, ''));
+    try {
+      const saved = JSON.parse(readFileSync(STATS_PATH, 'utf8')) as Record<string, { ok: number; total: number }>;
+      for (const [k, v] of Object.entries(saved)) this.mirrorStats.set(k, v);
+    } catch { /* first run */ }
   }
 
   private mirrorSuccessRate(base: string): number {
@@ -105,6 +113,9 @@ export class MonochromeClient {
     if (success) s.ok++;
     s.total++;
     this.mirrorStats.set(base, s);
+    try {
+      writeFileSync(STATS_PATH, JSON.stringify(Object.fromEntries(this.mirrorStats)));
+    } catch { /* non-fatal */ }
   }
 
   async search(query: string, limit: number): Promise<TrackMatch[]> {

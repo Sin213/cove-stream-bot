@@ -1,4 +1,9 @@
 import { SlashCommandBuilder, REST, Routes } from 'discord.js';
+import { createHash } from 'crypto';
+import { readFileSync, writeFileSync } from 'fs';
+import { resolve } from 'path';
+
+const HASH_PATH = resolve(process.cwd(), 'slash-hash.txt');
 
 const definitions = [
   new SlashCommandBuilder().setName('join').setDescription('Join your voice channel'),
@@ -50,9 +55,19 @@ const definitions = [
 ];
 
 export async function registerSlashCommands(token: string, clientId: string, guildId: string): Promise<void> {
+  const body = definitions.map(d => d.toJSON());
+  const hash = createHash('sha256').update(JSON.stringify(body)).digest('hex');
+
+  try {
+    const saved = readFileSync(HASH_PATH, 'utf8').trim();
+    if (saved === hash) {
+      console.log('Slash commands unchanged — skipping registration');
+      return;
+    }
+  } catch { /* no saved hash yet */ }
+
   const rest = new REST().setToken(token);
-  await rest.put(Routes.applicationGuildCommands(clientId, guildId), {
-    body: definitions.map(d => d.toJSON()),
-  });
+  await rest.put(Routes.applicationGuildCommands(clientId, guildId), { body });
+  writeFileSync(HASH_PATH, hash);
   console.log(`Registered ${definitions.length} slash commands`);
 }

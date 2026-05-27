@@ -15,10 +15,11 @@ interface StoredEntry {
 
 const PERSIST_PATH = resolve(process.cwd(), 'track-meta.json');
 const TTL_MS = 4 * 60 * 60 * 1000;
+const DEBOUNCE_MS = 500;
 
 const indexMeta = new Map<number, TrackMeta>();
 const urlMeta = new Map<string, TrackMeta>();
-const timestamps = new Map<string, number>(); // keyed by url or `i:${index}`
+const timestamps = new Map<string, number>();
 
 try {
   const raw = readFileSync(PERSIST_PATH, 'utf8');
@@ -35,7 +36,9 @@ try {
   }
 } catch { /* first run or corrupt — start fresh */ }
 
-function persist(): void {
+let _persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function flushSync(): void {
   try {
     const byIndex: [number, StoredEntry][] = [...indexMeta.entries()].map(
       ([k, v]) => [k, { meta: v, ts: timestamps.get(`i:${k}`) ?? Date.now() }]
@@ -46,6 +49,18 @@ function persist(): void {
     writeFileSync(PERSIST_PATH, JSON.stringify({ byIndex, byUrl }));
   } catch { /* non-fatal */ }
 }
+
+function persist(): void {
+  if (_persistTimer) return;
+  _persistTimer = setTimeout(() => {
+    _persistTimer = null;
+    flushSync();
+  }, DEBOUNCE_MS);
+}
+
+process.on('exit', () => {
+  if (_persistTimer) { clearTimeout(_persistTimer); flushSync(); }
+});
 
 export function setTrackMeta(playlistIndex: number, url: string, entry: TrackMeta): void {
   const now = Date.now();

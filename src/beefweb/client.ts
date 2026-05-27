@@ -1,9 +1,13 @@
 import type { PlayerState, TrackInfo, Playlist, PlaylistItem } from './types.js';
 
 const COLUMNS = ['%artist%', '%title%', '%album%', '%path%'];
+const PLAYLIST_ID_TTL = 30_000;
 
 export class BeefwebClient {
   private baseURL: string;
+  private _inflightState: Promise<PlayerState> | null = null;
+  private _playlistIdCache: string | null = null;
+  private _playlistIdExpiry = 0;
 
   constructor(baseURL: string) {
     this.baseURL = baseURL.replace(/\/$/, '');
@@ -19,9 +23,17 @@ export class BeefwebClient {
   }
 
   async getPlayerState(): Promise<PlayerState> {
+    if (this._inflightState) return this._inflightState;
     const cols = COLUMNS.map(encodeURIComponent).join(',');
-    const data = await this.request(`/api/player?columns=${cols}`) as { player: PlayerState };
-    return data.player;
+    this._inflightState = this.request(`/api/player?columns=${cols}`)
+      .then(data => (data as { player: PlayerState }).player)
+      .finally(() => { this._inflightState = null; });
+    return this._inflightState;
+  }
+
+  invalidatePlaylistCache(): void {
+    this._playlistIdCache = null;
+    this._playlistIdExpiry = 0;
   }
 
   async play(): Promise<void> {
@@ -89,24 +101,32 @@ export class BeefwebClient {
     if (opts?.play) body.play = true;
     if (opts?.index !== undefined) body.index = opts.index;
     await this.request(`/api/playlists/${playlistId}/items/add`, 'POST', body);
+    this.invalidatePlaylistCache();
   }
 
   async removeItem(playlistId: string, index: number): Promise<void> {
     await this.request(`/api/playlists/${playlistId}/items/remove`, 'POST', { items: [index] });
+    this.invalidatePlaylistCache();
   }
 
   async clearItems(playlistId: string, fromIndex: number, count: number): Promise<void> {
     if (count <= 0) return;
     const items = Array.from({ length: count }, (_, i) => fromIndex + i);
     await this.request(`/api/playlists/${playlistId}/items/remove`, 'POST', { items });
+    this.invalidatePlaylistCache();
   }
 
   async getCurrentPlaylistId(): Promise<string> {
+    if (this._playlistIdCache && Date.now() < this._playlistIdExpiry) {
+      return this._playlistIdCache;
+    }
     const playlists = await this.getPlaylists();
     const current = playlists.find(p => p.isCurrent);
-    if (current) return current.id;
-    if (playlists.length > 0) return playlists[0].id;
-    throw new Error('No playlists exist in the player');
+    const id = current?.id ?? playlists[0]?.id;
+    if (!id) throw new Error('No playlists exist in the player');
+    this._playlistIdCache = id;
+    this._playlistIdExpiry = Date.now() + PLAYLIST_ID_TTL;
+    return id;
   }
 
   async shuffle(playlistId: string): Promise<void> {
