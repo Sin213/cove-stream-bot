@@ -251,6 +251,9 @@ async function main() {
     if (votes * 2 > eligible) {
       voteSkipMessageId = null;
       await beefweb.next().catch(() => {});
+      try {
+        await (reaction.message.channel as any).send('The people have spoken! Skipped!');
+      } catch { /* channel gone */ }
     }
   });
   console.log('Bot is running');
