@@ -12,6 +12,7 @@ export const CONFIG = {
   GUILD_ID: requireEnv('GUILD_ID'),
   VOICE_CHANNEL_ID: requireEnv('VOICE_CHANNEL_ID'),
   TEXT_CHANNEL_ID: requireEnv('TEXT_CHANNEL_ID'),
+  PLAYER_BACKEND: process.env.PLAYER_BACKEND ?? 'beefweb',
   BEEFWEB_BASE_URL: process.env.BEEFWEB_BASE_URL ?? 'http://127.0.0.1:8880',
   FFMPEG_PATH: process.env.FFMPEG_PATH ?? 'ffmpeg',
   FFMPEG_INPUT_FORMAT: process.env.FFMPEG_INPUT_FORMAT ?? 'pulse',
