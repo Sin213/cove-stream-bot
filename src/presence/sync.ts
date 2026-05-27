@@ -3,7 +3,7 @@ import { BeefwebClient } from '../beefweb/client.js';
 import { getTrackMeta } from '../monochrome/trackMeta.js';
 import { CONFIG } from '../config.js';
 
-type TrackChangeCallback = (title: string, artist: string) => void;
+type TrackChangeCallback = (title: string, artist: string) => void | Promise<void>;
 
 let lastSignature = '';
 
@@ -43,7 +43,7 @@ export function startPresenceSync(
         status: 'online',
       });
 
-      onTrackChange?.(title, artist);
+      if (onTrackChange) await onTrackChange(title, artist);
     } catch {
       // Beefweb unreachable — silently skip this tick
     }

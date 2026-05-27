@@ -1,13 +1,17 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
-import { setAnnounceChannel, getAnnounceChannel } from '../autonp/state.js';
+import { setAnnounceChannelId, getAnnounceChannelId } from '../autonp/state.js';
 
 export const autonpCommand: CommandHandler = async (message, _args, _ctx) => {
-  if (getAnnounceChannel()) {
-    setAnnounceChannel(null);
+  if (getAnnounceChannelId()) {
+    setAnnounceChannelId(null);
     await reply(message, 'Auto now-playing disabled.');
   } else {
-    setAnnounceChannel(message.channel);
+    if (!message.channel) {
+      await reply(message, 'Cannot determine channel.');
+      return;
+    }
+    setAnnounceChannelId(message.channel.id);
     await reply(message, 'Auto now-playing enabled in this channel.');
   }
 };

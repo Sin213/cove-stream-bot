@@ -29,7 +29,7 @@ import { autonpCommand } from './commands/autonp.js';
 import { clearQueueCommand } from './commands/clearqueue.js';
 import { whitelistCommand } from './commands/whitelist.js';
 import { blacklistCommand } from './commands/blacklist.js';
-import { getAnnounceChannel } from './autonp/state.js';
+import { getAnnounceChannelId } from './autonp/state.js';
 
 registerCommand('join', joinCommand);
 registerCommand('leave', leaveCommand);
@@ -205,17 +205,52 @@ async function main() {
   const appId = client.application?.id ?? client.user!.id;
   registerSlashCommands(CONFIG.DISCORD_TOKEN, appId, CONFIG.GUILD_ID).catch(console.error);
 
-  startPresenceSync(client, beefweb, (title, artist) => {
+  let voteSkipMessageId: string | null = null;
+
+  startPresenceSync(client, beefweb, async (title, artist) => {
     const text = artist ? `▶ **${title}** — ${artist}` : `▶ **${title}**`;
+    voteSkipMessageId = null;
 
-    const ch = getAnnounceChannel();
-    if (ch) ch.send(text).catch(() => { /* channel gone */ });
+    const announceChannelId = getAnnounceChannelId();
+    if (announceChannelId) {
+      try {
+        const ch = client.channels.cache.get(announceChannelId);
+        if (ch && 'send' in ch && typeof (ch as any).send === 'function') {
+          const msg = await (ch as any).send(text) as { id: string; react(e: string): Promise<unknown> };
+          voteSkipMessageId = msg.id;
+          await msg.react('⏭');
+        }
+      } catch { /* channel gone */ }
+    }
 
-    const channelId = voiceManager.connection?.joinConfig.channelId;
-    if (channelId) {
+    const vcChannelId = voiceManager.connection?.joinConfig.channelId;
+    if (vcChannelId) {
       const status = artist ? `${title} — ${artist}` : title;
-      client.rest.put(`/channels/${channelId}/voice-status`, { body: { status } })
+      client.rest.put(`/channels/${vcChannelId}/voice-status`, { body: { status } })
         .catch(() => { /* non-critical */ });
+    }
+  });
+
+  // Vote-skip: majority of VC members reacting ⏭ on the autonp message skips the track
+  client.on(Events.MessageReactionAdd, async (reaction, user) => {
+    if (user.bot) return;
+    if (!voteSkipMessageId || reaction.message.id !== voteSkipMessageId) return;
+    if (reaction.emoji.name !== '⏭') return;
+
+    const vcChannelId = voiceManager.connection?.joinConfig.channelId;
+    if (!vcChannelId) return;
+
+    const vcChannel = client.channels.cache.get(vcChannelId);
+    if (!vcChannel || !('members' in vcChannel)) return;
+
+    const members = (vcChannel as any).members as Map<string, { user: { bot: boolean } }>;
+    const eligible = [...members.values()].filter(m => !m.user.bot).length;
+    if (eligible === 0) return;
+
+    const votes = (reaction.count ?? 1) - 1; // subtract bot's own reaction
+    if (votes * 2 > eligible) {
+      voteSkipMessageId = null;
+      await beefweb.next().catch(() => {});
     }
   });
   console.log('Bot is running');

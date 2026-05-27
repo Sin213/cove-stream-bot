@@ -1,11 +1,9 @@
-type SendableChannel = { send(content: string): Promise<unknown> };
+let announceChannelId: string | null = null;
 
-let announceChannel: SendableChannel | null = null;
-
-export function setAnnounceChannel(ch: SendableChannel | null): void {
-  announceChannel = ch;
+export function setAnnounceChannelId(id: string | null): void {
+  announceChannelId = id;
 }
 
-export function getAnnounceChannel(): SendableChannel | null {
-  return announceChannel;
+export function getAnnounceChannelId(): string | null {
+  return announceChannelId;
 }

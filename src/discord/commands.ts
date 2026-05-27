@@ -12,7 +12,7 @@ export interface CommandContext {
 
 export interface Responder {
   userId: string;
-  channel: { send(content: string): Promise<unknown> } | null;
+  channel: { id: string; send(content: string): Promise<unknown> } | null;
   member: { voice: { channel: { id: string; name: string; guild: unknown } | null } } | null;
   reply(content: string): Promise<void>;
 }
