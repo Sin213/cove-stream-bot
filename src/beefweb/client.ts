@@ -95,6 +95,11 @@ export class BeefwebClient {
     await this.request(`/api/playlists/${playlistId}/items/remove`, 'POST', { ranges: [[index, 1]] });
   }
 
+  async clearItems(playlistId: string, fromIndex: number, count: number): Promise<void> {
+    if (count <= 0) return;
+    await this.request(`/api/playlists/${playlistId}/items/remove`, 'POST', { ranges: [[fromIndex, count]] });
+  }
+
   async getCurrentPlaylistId(): Promise<string> {
     const playlists = await this.getPlaylists();
     const current = playlists.find(p => p.isCurrent);

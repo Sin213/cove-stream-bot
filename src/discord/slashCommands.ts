@@ -19,6 +19,18 @@ const definitions = [
   new SlashCommandBuilder().setName('restart').setDescription('Restart the current track from the beginning'),
   new SlashCommandBuilder().setName('autonp').setDescription('Toggle auto now-playing announcements in this channel'),
   new SlashCommandBuilder().setName('status').setDescription('Show bot and player status'),
+  new SlashCommandBuilder().setName('clearqueue').setDescription('Clear upcoming tracks from the queue'),
+  new SlashCommandBuilder().setName('whitelist')
+    .setDescription('Manage the user whitelist')
+    .addStringOption(o =>
+      o.setName('action').setDescription('Action to perform').setRequired(true)
+        .addChoices(
+          { name: 'add', value: 'add' },
+          { name: 'remove', value: 'remove' },
+          { name: 'list', value: 'list' },
+        )
+    )
+    .addUserOption(o => o.setName('user').setDescription('User to add or remove').setRequired(false)),
 ];
 
 export async function registerSlashCommands(token: string, clientId: string, guildId: string): Promise<void> {

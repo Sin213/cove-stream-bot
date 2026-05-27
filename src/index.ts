@@ -26,6 +26,8 @@ import { queueCommand } from './commands/queue.js';
 import { removeCommand } from './commands/remove.js';
 import { restartCommand } from './commands/restart.js';
 import { autonpCommand } from './commands/autonp.js';
+import { clearQueueCommand } from './commands/clearqueue.js';
+import { whitelistCommand } from './commands/whitelist.js';
 import { getAnnounceChannel } from './autonp/state.js';
 
 registerCommand('join', joinCommand);
@@ -47,11 +49,16 @@ registerCommand('remove', removeCommand);
 registerCommand('rm', removeCommand);
 registerCommand('restart', restartCommand);
 registerCommand('autonp', autonpCommand);
+registerCommand('clearqueue', clearQueueCommand);
+registerCommand('cq', clearQueueCommand);
+registerCommand('whitelist', whitelistCommand);
+registerCommand('wl', whitelistCommand);
 
 const PREFIX = '!';
 
 const PROTECTED_COMMANDS = new Set([
   'join', 'leave', 'relay', 'play', 'pause', 'next', 'skip', 'prev', 'stop', 'remove', 'rm',
+  'clearqueue', 'cq', 'whitelist', 'wl',
 ]);
 
 const handledMessageIds = new Set<string>();
@@ -66,6 +73,11 @@ function slashArgs(interaction: ChatInputCommandInteraction): string[] {
       return [interaction.options.getString('query', true)];
     case 'remove':
       return [String(interaction.options.getInteger('position', true))];
+    case 'whitelist': {
+      const action = interaction.options.getString('action', true);
+      const user = interaction.options.getUser('user');
+      return user ? [action, user.id] : [action];
+    }
     default:
       return [];
   }
