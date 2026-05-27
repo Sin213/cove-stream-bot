@@ -1,0 +1,81 @@
+import type { CommandHandler } from '../discord/commands.js';
+import { reply } from '../discord/commands.js';
+import { getSearchResult } from '../monochrome/selection.js';
+import { setTrackMeta } from '../monochrome/trackMeta.js';
+
+function formatStreamError(reason: string | undefined, primary: string | undefined): string {
+  switch (reason) {
+    case 'PREVIEW_ONLY':
+      return 'Stream unavailable: TIDAL returned preview-only. Worker credentials need an active subscription.';
+    case 'CREDENTIAL_EXPIRED':
+      return 'Stream unavailable: worker credentials expired. REFRESH_TOKEN needs updating.';
+    case 'REQUIRES_SUBSCRIPTION':
+      return 'Stream unavailable: track requires an active subscription.';
+    case 'MANIFEST_ONLY':
+      return 'Stream unavailable: DRM manifest with no direct URL. Format not supported by player.';
+    default: {
+      const lines = [`Failed to get stream from Monochrome.`, `Reason: ${reason ?? 'UNKNOWN'}`];
+      if (primary) lines.push(`Primary failure: ${primary}`);
+      return lines.join('\n');
+    }
+  }
+}
+
+export const playCommand: CommandHandler = async (message, args, ctx) => {
+  const num = args.length > 0 ? parseInt(args[0], 10) : NaN;
+
+  if (Number.isInteger(num) && num > 0) {
+    const result = getSearchResult(message.author.id, num);
+    if (!result) {
+      await reply(message, 'No search results found. Run `!search <query>` first.');
+      return;
+    }
+
+    let url: string;
+    try {
+      url = await ctx.monochrome.getStreamUrl(result.tidalId, undefined, result.isrc);
+    } catch (err) {
+      const reason = (err as any)?.reason as string | undefined;
+      const primary = (err as any)?.primaryFailure as string | undefined;
+      await reply(message, formatStreamError(reason, primary));
+      return;
+    }
+
+    let queued = false;
+    try {
+      const [playlists, state] = await Promise.all([
+        ctx.beefweb.getPlaylists(),
+        ctx.beefweb.getPlayerState(),
+      ]);
+      const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
+      if (!playlist) throw new Error('No playlists exist in the player');
+      const isPlaying = state.playbackState === 'playing';
+      const newIndex = playlist.itemCount;
+      await ctx.beefweb.addItems(playlist.id, [url], { play: !isPlaying });
+      setTrackMeta(newIndex, url, { title: result.title, artists: result.artists });
+      queued = isPlaying;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      await reply(message, `Failed to queue track: ${msg}`);
+      return;
+    }
+
+    const artist = result.artists[0] ?? 'Unknown';
+    const label = queued ? '⏭ Queued' : '▶ Playing';
+    await reply(message, `${label}: ${result.title} — ${artist}`);
+    return;
+  }
+
+  const state = await ctx.beefweb.getPlayerState();
+  if (state.playbackState === 'playing') {
+    await reply(message, 'Already playing.');
+    return;
+  }
+  if (state.playbackState === 'paused') {
+    await ctx.beefweb.pauseToggle();
+    await reply(message, 'Playback resumed.');
+    return;
+  }
+  await ctx.beefweb.play();
+  await reply(message, 'Playback started.');
+};

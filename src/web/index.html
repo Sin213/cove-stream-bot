@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>cove-stream-bot</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #1e1e1e; color: #eee; padding: 2rem; }
+    .card { background: #2d2d2d; border-radius: 8px; padding: 1rem; margin-bottom: 1rem; }
+    .label { color: #aaa; font-size: 0.9rem; }
+    .value { font-size: 1.2rem; margin-top: 0.25rem; }
+  </style>
+</head>
+<body>
+  <h1>cove-stream-bot</h1>
+  <div class="card">
+    <div class="label">Relay</div>
+    <div class="value" id="relay">Loading...</div>
+  </div>
+  <div class="card">
+    <div class="label">Playback</div>
+    <div class="value" id="playback">Loading...</div>
+  </div>
+  <div class="card">
+    <div class="label">Track</div>
+    <div class="value" id="track">Loading...</div>
+  </div>
+  <script>
+    async function refresh() {
+      try {
+        const res = await fetch('/api/state');
+        const data = await res.json();
+        document.getElementById('relay').textContent = data.relayRunning ? 'Running' : 'Stopped';
+        document.getElementById('playback').textContent = data.playbackState || 'Unknown';
+        const t = data.track;
+        document.getElementById('track').textContent = t ? `${t.artist} — ${t.title}` : 'Nothing playing';
+      } catch {
+        document.getElementById('relay').textContent = 'Error';
+      }
+    }
+    refresh();
+    setInterval(refresh, 3000);
+  </script>
+</body>
+</html>

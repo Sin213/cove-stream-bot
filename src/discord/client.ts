@@ -1,0 +1,22 @@
+import { Client, GatewayIntentBits, ActivityType } from 'discord.js';
+
+export function createDiscordClient(): Client {
+  const client = new Client({
+    intents: [
+      GatewayIntentBits.Guilds,
+      GatewayIntentBits.GuildMessages,
+      GatewayIntentBits.GuildVoiceStates,
+      GatewayIntentBits.MessageContent,
+    ],
+  });
+
+  client.once('ready', () => {
+    console.log(`Bot logged in as ${client.user?.tag}`);
+    client.user?.setPresence({
+      activities: [{ name: 'DeaDBeeF', type: ActivityType.Listening }],
+      status: 'online',
+    });
+  });
+
+  return client;
+}
