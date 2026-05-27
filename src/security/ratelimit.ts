@@ -17,6 +17,21 @@ const COOLDOWNS: Record<string, number> = {
 
 const globalWindows = new Map<string, UserWindow>();
 const lastUsed = new Map<string, number>();
+let lastCleanup = 0;
+
+function cleanup(now: number): void {
+  if (now - lastCleanup < WINDOW_MS) return;
+  lastCleanup = now;
+
+  for (const [key, win] of globalWindows) {
+    if (now - win.windowStart > WINDOW_MS) globalWindows.delete(key);
+  }
+
+  const cooldownTtl = Math.max(...Object.values(COOLDOWNS), WINDOW_MS);
+  for (const [key, ts] of lastUsed) {
+    if (now - ts > cooldownTtl) lastUsed.delete(key);
+  }
+}
 
 export function checkRateLimit(
   guildId: string,
@@ -24,6 +39,7 @@ export function checkRateLimit(
   command: string,
 ): { allowed: boolean; reason?: string } {
   const now = Date.now();
+  cleanup(now);
   const globalKey = `${guildId}:${userId}`;
 
   const win = globalWindows.get(globalKey) ?? { count: 0, windowStart: now };

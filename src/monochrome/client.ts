@@ -1,8 +1,9 @@
 import type { TrackMatch, StreamInfo } from './types.js';
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, renameSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 const STATS_PATH = resolve(process.cwd(), 'mirror-stats.json');
+const STATS_DEBOUNCE_MS = 1_000;
 
 interface MirrorFailure {
   mirror: string;
@@ -92,6 +93,7 @@ export class MonochromeClient {
   private quality: string;
   private qobuzBaseURLs: string[];
   private mirrorStats = new Map<string, { ok: number; total: number }>();
+  private statsPersistTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(baseURLs: string[], quality: string, qobuzBaseURLs: string[] = []) {
     this.baseURLs = baseURLs.map(u => u.replace(/\/$/, ''));
@@ -101,6 +103,12 @@ export class MonochromeClient {
       const saved = JSON.parse(readFileSync(STATS_PATH, 'utf8')) as Record<string, { ok: number; total: number }>;
       for (const [k, v] of Object.entries(saved)) this.mirrorStats.set(k, v);
     } catch { /* first run */ }
+    process.on('exit', () => {
+      if (this.statsPersistTimer) {
+        clearTimeout(this.statsPersistTimer);
+        this.flushMirrorStats();
+      }
+    });
   }
 
   private mirrorSuccessRate(base: string): number {
@@ -113,9 +121,23 @@ export class MonochromeClient {
     if (success) s.ok++;
     s.total++;
     this.mirrorStats.set(base, s);
+    this.persistMirrorStats();
+  }
+
+  private flushMirrorStats(): void {
     try {
-      writeFileSync(STATS_PATH, JSON.stringify(Object.fromEntries(this.mirrorStats)));
+      const tmpPath = `${STATS_PATH}.tmp`;
+      writeFileSync(tmpPath, JSON.stringify(Object.fromEntries(this.mirrorStats)));
+      renameSync(tmpPath, STATS_PATH);
     } catch { /* non-fatal */ }
+  }
+
+  private persistMirrorStats(): void {
+    if (this.statsPersistTimer) return;
+    this.statsPersistTimer = setTimeout(() => {
+      this.statsPersistTimer = null;
+      this.flushMirrorStats();
+    }, STATS_DEBOUNCE_MS);
   }
 
   async search(query: string, limit: number): Promise<TrackMatch[]> {

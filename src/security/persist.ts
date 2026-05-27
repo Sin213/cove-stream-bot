@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, renameSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 interface GuildPersistedState {
@@ -29,6 +29,8 @@ export function saveGuildState(
     blacklistedUserIds: [...blacklistedUserIds],
   };
   try {
-    writeFileSync(PERSIST_PATH, JSON.stringify(data, null, 2));
+    const tmpPath = `${PERSIST_PATH}.tmp`;
+    writeFileSync(tmpPath, JSON.stringify(data, null, 2));
+    renameSync(tmpPath, PERSIST_PATH);
   } catch { /* non-fatal */ }
 }

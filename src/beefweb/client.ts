@@ -2,6 +2,7 @@ import type { PlayerState, TrackInfo, Playlist, PlaylistItem } from './types.js'
 
 const COLUMNS = ['%artist%', '%title%', '%album%', '%path%'];
 const PLAYLIST_ID_TTL = 30_000;
+const REQUEST_TIMEOUT_MS = 8_000;
 
 export class BeefwebClient {
   private baseURL: string;
@@ -14,7 +15,11 @@ export class BeefwebClient {
   }
 
   private async request(path: string, method = 'GET', body?: unknown): Promise<unknown> {
-    const opts: RequestInit = { method, headers: { 'Content-Type': 'application/json' } };
+    const opts: RequestInit = {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+    };
     if (body) opts.body = JSON.stringify(body);
     const res = await fetch(`${this.baseURL}${path}`, opts);
     if (!res.ok) throw new Error(`Beefweb ${method} ${path}: ${res.status}`);

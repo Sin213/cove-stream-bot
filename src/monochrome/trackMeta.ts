@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, renameSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 export interface TrackMeta {
@@ -46,7 +46,9 @@ function flushSync(): void {
     const byUrl: [string, StoredEntry][] = [...urlMeta.entries()].map(
       ([k, v]) => [k, { meta: v, ts: timestamps.get(k) ?? Date.now() }]
     );
-    writeFileSync(PERSIST_PATH, JSON.stringify({ byIndex, byUrl }));
+    const tmpPath = `${PERSIST_PATH}.tmp`;
+    writeFileSync(tmpPath, JSON.stringify({ byIndex, byUrl }));
+    renameSync(tmpPath, PERSIST_PATH);
   } catch { /* non-fatal */ }
 }
 

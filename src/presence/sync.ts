@@ -9,6 +9,7 @@ import { advanceQueue } from '../queue/store.js';
 type TrackChangeCallback = (title: string, artist: string, meta?: TrackMeta) => void | Promise<void>;
 
 let lastSignature = '';
+let syncRunning = false;
 
 export function startPresenceSync(
   client: Client,
@@ -16,6 +17,8 @@ export function startPresenceSync(
   onTrackChange?: TrackChangeCallback,
 ): NodeJS.Timeout {
   return setInterval(async () => {
+    if (syncRunning) return;
+    syncRunning = true;
     try {
       const track = await beefweb.getCurrentTrack();
 
@@ -58,6 +61,8 @@ export function startPresenceSync(
       if (onTrackChange) await onTrackChange(title, artist, stored ?? undefined);
     } catch {
       // Beefweb unreachable — silently skip this tick
+    } finally {
+      syncRunning = false;
     }
   }, CONFIG.STATUS_POLL_MS);
 }

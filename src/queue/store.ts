@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { readFileSync, renameSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import type { MonochromeClient } from '../monochrome/client.js';
 import type { BeefwebClient } from '../beefweb/client.js';
@@ -13,6 +13,7 @@ export interface QueueEntry {
 
 const PERSIST_PATH = resolve(process.cwd(), 'queue.json');
 const DEBOUNCE_MS = 500;
+const RESTORE_CONCURRENCY = 3;
 let _queue: QueueEntry[] = [];
 let _persistTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -22,12 +23,41 @@ try {
 } catch { /* first run */ }
 
 function flushSync(): void {
-  try { writeFileSync(PERSIST_PATH, JSON.stringify(_queue)); } catch { /* non-fatal */ }
+  try {
+    const tmpPath = `${PERSIST_PATH}.tmp`;
+    writeFileSync(tmpPath, JSON.stringify(_queue));
+    renameSync(tmpPath, PERSIST_PATH);
+  } catch { /* non-fatal */ }
 }
 
 function persist(): void {
   if (_persistTimer) return;
   _persistTimer = setTimeout(() => { _persistTimer = null; flushSync(); }, DEBOUNCE_MS);
+}
+
+async function mapLimited<T, R>(
+  items: T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+
+  async function worker(): Promise<void> {
+    while (next < items.length) {
+      const index = next++;
+      try {
+        results[index] = { status: 'fulfilled', value: await fn(items[index], index) };
+      } catch (reason) {
+        results[index] = { status: 'rejected', reason };
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, () => worker())
+  );
+  return results;
 }
 
 process.on('exit', () => {
@@ -67,9 +97,11 @@ export async function restoreQueue(beefweb: BeefwebClient, monochrome: Monochrom
     if (!playlist || playlist.itemCount > 0) return; // don't restore if playlist has content
 
     console.log(`[queue] Restoring ${_queue.length} queued track(s)…`);
-    const resolved = await Promise.allSettled(
-      _queue.map(entry => monochrome.getStreamUrl(entry.tidalId, undefined, entry.isrc)
-        .then(url => ({ entry, url })))
+    const resolved = await mapLimited(
+      _queue,
+      RESTORE_CONCURRENCY,
+      entry => monochrome.getStreamUrl(entry.tidalId, undefined, entry.isrc)
+        .then(url => ({ entry, url }))
     );
     let index = 0;
     for (const result of resolved) {
