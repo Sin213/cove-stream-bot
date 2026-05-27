@@ -266,30 +266,31 @@ async function main() {
       gs.voteSkipMessageId = null;
     }
 
-    // Build embed for autonp announcement
-    const embed = new EmbedBuilder()
-      .setTitle(title)
-      .setDescription(artist || '​')
-      .setColor(0x1db954)
-      .setFooter({ text: '▶ Now Playing' });
-    if (meta?.albumArtUrl) embed.setThumbnail(meta.albumArtUrl);
+    // Build embed for autonp (only when we have a displayable title)
+    let embed: EmbedBuilder | null = null;
+    if (title) {
+      embed = new EmbedBuilder().setTitle(title).setColor(0x1db954).setFooter({ text: '▶ Now Playing' });
+      if (artist) embed.setDescription(artist);
+      if (meta?.albumArtUrl) embed.setThumbnail(meta.albumArtUrl);
+    }
 
-    // Announce to all guilds that have autonp enabled
     for (const gs of getAllGuildStates()) {
-      if (!gs.announceChannelId) continue;
-      try {
-        const ch = client.channels.cache.get(gs.announceChannelId);
-        if (ch && 'send' in ch && typeof (ch as any).send === 'function') {
-          const msg = await (ch as any).send({ embeds: [embed] }) as { id: string; react(e: string): Promise<unknown> };
-          gs.voteSkipMessageId = msg.id;
-          await msg.react('⏭');
-        }
-      } catch { /* channel gone */ }
+      // Autonp announcement
+      if (gs.announceChannelId && embed) {
+        try {
+          const ch = client.channels.cache.get(gs.announceChannelId);
+          if (ch && 'send' in ch && typeof (ch as any).send === 'function') {
+            const msg = await (ch as any).send({ embeds: [embed] }) as { id: string; react(e: string): Promise<unknown> };
+            gs.voteSkipMessageId = msg.id;
+            await msg.react('⏭');
+          }
+        } catch { /* channel gone */ }
+      }
 
-      // Update VC status for this guild
+      // VC status — always update, clear when no metadata
       const vcChannelId = gs.voiceManager.connection?.joinConfig.channelId;
       if (vcChannelId) {
-        const status = artist ? `${title} — ${artist}` : title;
+        const status = title && artist ? `${title} — ${artist}` : title || '';
         client.rest.put(`/channels/${vcChannelId}/voice-status`, { body: { status } })
           .catch(() => { /* non-critical */ });
       }

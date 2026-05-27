@@ -43,20 +43,21 @@ export function startPresenceSync(
       const artist = stored?.artists[0] || rawArtist;
       const title = stored?.title || rawTitle;
 
-      if (!artist && !title) return;
-
-      const signature = `${artist}|${title}`;
+      // Include track index so signature changes even for URL-only tracks with no metadata
+      const signature = (artist || title) ? `${artist}|${title}` : `idx:${track.trackIndex}`;
       if (signature === lastSignature) return;
 
       lastSignature = signature;
       advanceQueue();
-      pushHistory(title, artist ? [artist] : []);
 
-      const name = artist ? `${artist} — ${title}` : title;
-      client.user?.setPresence({
-        activities: [{ name, type: ActivityType.Listening }],
-        status: 'online',
-      });
+      if (artist || title) {
+        pushHistory(title, artist ? [artist] : []);
+        const name = artist ? `${artist} — ${title}` : title;
+        client.user?.setPresence({
+          activities: [{ name, type: ActivityType.Listening }],
+          status: 'online',
+        });
+      }
 
       if (onTrackChange) await onTrackChange(title, artist, stored ?? undefined);
     } catch {
