@@ -35,6 +35,7 @@ import { shuffleCommand } from './commands/shuffle.js';
 import { volumeCommand } from './commands/volume.js';
 import { historyCommand } from './commands/history.js';
 import { mirrorsCommand } from './commands/mirrors.js';
+import { voteskipCommand } from './commands/voteskip.js';
 
 registerCommand('join', joinCommand);
 registerCommand('leave', leaveCommand);
@@ -66,6 +67,8 @@ registerCommand('volume', volumeCommand);
 registerCommand('vol', volumeCommand);
 registerCommand('history', historyCommand);
 registerCommand('mirrors', mirrorsCommand);
+registerCommand('voteskip', voteskipCommand);
+registerCommand('vs', voteskipCommand);
 
 const PREFIX = '!';
 

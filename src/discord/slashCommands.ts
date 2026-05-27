@@ -52,6 +52,7 @@ const definitions = [
     .addIntegerOption(o => o.setName('percent').setDescription('Volume level (0-100)').setRequired(false).setMinValue(0).setMaxValue(100)),
   new SlashCommandBuilder().setName('history').setDescription('Show recently played tracks'),
   new SlashCommandBuilder().setName('mirrors').setDescription('Show Monochrome mirror health stats'),
+  new SlashCommandBuilder().setName('voteskip').setDescription('Post a vote to skip the current track'),
 ];
 
 export async function registerSlashCommands(token: string, clientId: string, guildId: string): Promise<void> {
