@@ -20,7 +20,7 @@ export function startPresenceSync(
         if (lastSignature !== '') {
           lastSignature = '';
           client.user?.setPresence({
-            activities: [{ name: 'DeaDBeeF', type: ActivityType.Listening }],
+            activities: [{ name: 'music', type: ActivityType.Listening }],
             status: 'online',
           });
         }

@@ -3,7 +3,7 @@ import { SlashCommandBuilder, REST, Routes } from 'discord.js';
 const definitions = [
   new SlashCommandBuilder().setName('join').setDescription('Join your voice channel'),
   new SlashCommandBuilder().setName('leave').setDescription('Leave the voice channel'),
-  new SlashCommandBuilder().setName('relay').setDescription('Start relaying DeaDBeeF audio'),
+  new SlashCommandBuilder().setName('relay').setDescription('Start relaying player audio to the voice channel'),
   new SlashCommandBuilder().setName('play').setDescription('Play a search result or resume playback')
     .addIntegerOption(o => o.setName('number').setDescription('Search result number').setRequired(false).setMinValue(1)),
   new SlashCommandBuilder().setName('pause').setDescription('Pause or resume playback'),

@@ -13,7 +13,7 @@ export function createDiscordClient(): Client {
   client.once('ready', () => {
     console.log(`Bot logged in as ${client.user?.tag}`);
     client.user?.setPresence({
-      activities: [{ name: 'DeaDBeeF', type: ActivityType.Listening }],
+      activities: [{ name: 'music', type: ActivityType.Listening }],
       status: 'online',
     });
   });

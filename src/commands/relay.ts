@@ -19,5 +19,5 @@ export const relayCommand: CommandHandler = async (message, _args, ctx) => {
   }
 
   ctx.relayManager.start(ctx.voiceManager.player);
-  await reply(message, 'Relaying DeaDBeeF audio to voice channel.');
+  await reply(message, 'Relaying player audio to voice channel.');
 };
