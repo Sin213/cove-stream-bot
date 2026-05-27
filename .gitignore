@@ -1,3 +1,15 @@
 node_modules/
 dist/
 .env
+
+# Runtime data
+audit.log
+track-meta.json
+mirror-stats.json
+queue.json
+slash-hash.txt
+
+# Tool configs
+.agents/
+.claude/
+.codex/
