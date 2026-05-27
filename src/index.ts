@@ -1,7 +1,10 @@
 import { Events } from 'discord.js';
+import type { ChatInputCommandInteraction } from 'discord.js';
 import { CONFIG } from './config.js';
 import { createDiscordClient } from './discord/client.js';
 import { registerCommand, getCommand } from './discord/commands.js';
+import type { Responder } from './discord/commands.js';
+import { registerSlashCommands } from './discord/slashCommands.js';
 import { BeefwebClient } from './beefweb/client.js';
 import { RelayManager } from './voice/relay.js';
 import { VoiceConnectionManager } from './voice/connection.js';
@@ -53,6 +56,21 @@ const PROTECTED_COMMANDS = new Set([
 
 const handledMessageIds = new Set<string>();
 
+function slashArgs(interaction: ChatInputCommandInteraction): string[] {
+  switch (interaction.commandName) {
+    case 'play': {
+      const n = interaction.options.getInteger('number');
+      return n !== null ? [String(n)] : [];
+    }
+    case 'search':
+      return [interaction.options.getString('query', true)];
+    case 'remove':
+      return [String(interaction.options.getInteger('position', true))];
+    default:
+      return [];
+  }
+}
+
 async function main() {
   const client = createDiscordClient();
   const beefweb = new BeefwebClient(CONFIG.BEEFWEB_BASE_URL);
@@ -72,6 +90,7 @@ async function main() {
     startWebServer(beefweb, relayManager, CONFIG.WEB_UI_PORT);
   }
 
+  // Prefix commands (!play, !search, etc.)
   client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
     if (!message.content.startsWith(PREFIX)) return;
@@ -99,19 +118,70 @@ async function main() {
       return;
     }
 
+    const responder: Responder = {
+      userId: message.author.id,
+      channel: message.channel as Responder['channel'],
+      member: message.member as Responder['member'],
+      reply: async (content) => {
+        if ('send' in message.channel) await (message.channel as any).send(content);
+      },
+    };
+
     const ctx = { beefweb, monochrome, relayManager, voiceManager };
 
     try {
-      await handler(message, args, ctx);
+      await handler(responder, args, ctx);
     } catch (err) {
       console.error(`Command error (${commandName}):`, err);
       try {
-        await message.channel.send('Command failed. Check console for details.');
-      } catch { /* message or channel gone */ }
+        await (message.channel as any).send('Command failed. Check console for details.');
+      } catch { /* channel gone */ }
+    }
+  });
+
+  // Slash commands (/play, /search, etc.)
+  client.on(Events.InteractionCreate, async (interaction) => {
+    if (!interaction.isChatInputCommand()) return;
+
+    const handler = getCommand(interaction.commandName);
+    if (!handler) return;
+
+    if (
+      PROTECTED_COMMANDS.has(interaction.commandName) &&
+      CONFIG.APPROVED_USER_IDS.size > 0 &&
+      !CONFIG.APPROVED_USER_IDS.has(interaction.user.id)
+    ) {
+      await interaction.reply({ content: 'You are not authorized to use this command.', ephemeral: true });
+      return;
+    }
+
+    await interaction.deferReply();
+
+    const responder: Responder = {
+      userId: interaction.user.id,
+      channel: interaction.channel as Responder['channel'],
+      member: interaction.member as Responder['member'],
+      reply: async (content) => { await interaction.editReply(content); },
+    };
+
+    const ctx = { beefweb, monochrome, relayManager, voiceManager };
+
+    try {
+      await handler(responder, slashArgs(interaction), ctx);
+    } catch (err) {
+      console.error(`Slash command error (${interaction.commandName}):`, err);
+      try {
+        await interaction.editReply('Command failed. Check console for details.');
+      } catch { /* interaction expired */ }
     }
   });
 
   await client.login(CONFIG.DISCORD_TOKEN);
+
+  // Register slash commands with this guild
+  const appId = client.application?.id ?? client.user!.id;
+  registerSlashCommands(CONFIG.DISCORD_TOKEN, appId, CONFIG.GUILD_ID).catch(console.error);
+
   startPresenceSync(client, beefweb, (title, artist) => {
     const text = artist ? `▶ **${title}** — ${artist}` : `▶ **${title}**`;
 

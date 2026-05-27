@@ -25,7 +25,7 @@ export const playCommand: CommandHandler = async (message, args, ctx) => {
   const num = args.length > 0 ? parseInt(args[0], 10) : NaN;
 
   if (Number.isInteger(num) && num > 0) {
-    const result = getSearchResult(message.author.id, num);
+    const result = getSearchResult(message.userId, num);
     if (!result) {
       await reply(message, 'No search results found. Run `!search <query>` first.');
       return;

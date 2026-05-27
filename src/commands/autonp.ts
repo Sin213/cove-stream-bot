@@ -7,7 +7,7 @@ export const autonpCommand: CommandHandler = async (message, _args, _ctx) => {
     setAnnounceChannel(null);
     await reply(message, 'Auto now-playing disabled.');
   } else {
-    setAnnounceChannel(message.channel as { send(content: string): Promise<unknown> });
+    setAnnounceChannel(message.channel);
     await reply(message, 'Auto now-playing enabled in this channel.');
   }
 };

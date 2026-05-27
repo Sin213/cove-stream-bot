@@ -30,7 +30,7 @@ export const searchCommand: CommandHandler = async (message, args, ctx) => {
     return;
   }
 
-  setSearchResults(message.author.id, results);
+  setSearchResults(message.userId, results);
 
   const lines = results.map((t, i) =>
     `**${i + 1}.** ${t.title} — ${t.artists.join(', ') || 'Unknown'} — ${t.album} [${formatDuration(t.durationSec)}]`
