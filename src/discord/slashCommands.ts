@@ -8,7 +8,6 @@ const HASH_PATH = resolve(process.cwd(), 'slash-hash.txt');
 const definitions = [
   new SlashCommandBuilder().setName('join').setDescription('Join your voice channel'),
   new SlashCommandBuilder().setName('leave').setDescription('Leave the voice channel'),
-  new SlashCommandBuilder().setName('relay').setDescription('Start relaying player audio to the voice channel'),
   new SlashCommandBuilder().setName('play').setDescription('Play a search result or resume playback')
     .addIntegerOption(o => o.setName('number').setDescription('Search result number').setRequired(false).setMinValue(1)),
   new SlashCommandBuilder().setName('pause').setDescription('Pause or resume playback'),
@@ -51,6 +50,8 @@ const definitions = [
   new SlashCommandBuilder().setName('history').setDescription('Show recently played tracks'),
   new SlashCommandBuilder().setName('mirrors').setDescription('Show Monochrome mirror health stats'),
   new SlashCommandBuilder().setName('voteskip').setDescription('Post a vote to skip the current track'),
+  new SlashCommandBuilder().setName('autosearch').setDescription('Search and immediately queue the top result')
+    .addStringOption(o => o.setName('query').setDescription('Artist, title, or album').setRequired(true)),
 ];
 
 export async function registerSlashCommands(token: string, clientId: string, guildId: string): Promise<void> {

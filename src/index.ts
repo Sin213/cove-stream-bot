@@ -86,6 +86,7 @@ function slashArgs(interaction: ChatInputCommandInteraction): string[] {
       return n !== null ? [String(n)] : [];
     }
     case 'search':
+    case 'autosearch':
       return [interaction.options.getString('query', true)];
     case 'remove':
       return [String(interaction.options.getInteger('position', true))];
