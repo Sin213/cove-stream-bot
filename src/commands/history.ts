@@ -9,9 +9,10 @@ export const historyCommand: CommandHandler = async (message, _args, _ctx) => {
     return;
   }
   const lines = entries.slice(0, 10).map((e, i) => {
-    const artist = e.artists[0] ?? 'Unknown';
-    const time = new Date(e.playedAt).toLocaleTimeString();
-    return `${i + 1}. **${e.title}** — ${artist} *(${time})*`;
+    const artist = e.artists[0] ?? '';
+    const ts = `<t:${Math.floor(e.playedAt / 1000)}:t>`;
+    const label = artist ? `**${e.title}** — ${artist}` : `**${e.title}**`;
+    return `${i + 1}. ${label} ${ts}`;
   });
   await reply(message, lines.join('\n'));
 };

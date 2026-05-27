@@ -30,9 +30,15 @@ export function startPresenceSync(
         return;
       }
 
+      function isUrl(s: string): boolean {
+        return s.startsWith('http') || s.includes('://') || (s.includes('?') && s.includes('='));
+      }
+
       const stored = getTrackMeta(track.trackIndex, track.path);
-      const artist = (stored?.artists[0]) || (track.artist !== 'Unknown' ? track.artist : '');
-      const title = stored?.title || (track.title !== 'Unknown' ? track.title : '');
+      const rawArtist = track.artist !== 'Unknown' && !isUrl(track.artist) ? track.artist : '';
+      const rawTitle = track.title !== 'Unknown' && !isUrl(track.title) ? track.title : '';
+      const artist = stored?.artists[0] || rawArtist;
+      const title = stored?.title || rawTitle;
 
       if (!artist && !title) return;
 

@@ -21,17 +21,25 @@ export const nowplayingCommand: CommandHandler = async (message, _args, ctx) => 
   }
 
   const stored = getTrackMeta(track.trackIndex, track.path);
-  const title = stored?.title || track.title;
-  const artist = stored?.artists[0] || track.artist;
+
+  function looksLikeUrl(s: string): boolean {
+    return s.startsWith('http') || s.includes('://') || (s.includes('?') && s.includes('='));
+  }
+
+  const rawTitle = track.title !== 'Unknown' && !looksLikeUrl(track.title) ? track.title : null;
+  const rawArtist = track.artist !== 'Unknown' && !looksLikeUrl(track.artist) ? track.artist : null;
+  const title = stored?.title || rawTitle || null;
+  const artist = stored?.artists[0] || rawArtist || null;
   const bar = progressBar(track.position, track.duration);
   const pos = formatDuration(track.position);
   const dur = formatDuration(track.duration);
 
   const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setDescription(`${artist}`)
     .addFields({ name: '​', value: `\`[${bar}]\` ${pos} / ${dur}` })
     .setColor(0x1db954);
+
+  if (title) embed.setTitle(title);
+  if (artist) embed.setDescription(artist);
 
   if (stored?.albumArtUrl) embed.setThumbnail(stored.albumArtUrl);
 

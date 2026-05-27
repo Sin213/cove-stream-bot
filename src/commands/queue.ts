@@ -8,6 +8,14 @@ function fmt(sec: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+function isUrl(s: string): boolean {
+  return s.startsWith('http') || s.includes('://') || (s.includes('?') && s.includes('='));
+}
+
+function cleanLabel(raw: string, fallback: string): string {
+  return raw && raw !== 'Unknown' && !isUrl(raw) ? raw : fallback;
+}
+
 export const queueCommand: CommandHandler = async (message, args, ctx) => {
   const [state, playlistId] = await Promise.all([
     ctx.beefweb.getPlayerState(),
@@ -20,12 +28,13 @@ export const queueCommand: CommandHandler = async (message, args, ctx) => {
   if (state.playbackState !== 'stopped' && currentIndex >= 0) {
     const cols = state.activeItem.columns;
     const stored = getTrackMeta(currentIndex, cols[3]);
-    const artist = stored ? stored.artists[0] ?? 'Unknown' : (cols[0] || 'Unknown');
-    const title = stored ? stored.title : (cols[1] || 'Unknown');
+    const artist = stored ? (stored.artists[0] ?? '') : cleanLabel(cols[0], '');
+    const title = stored ? stored.title : cleanLabel(cols[1], '');
     const pos = fmt(state.activeItem.position);
     const dur = fmt(state.activeItem.duration);
     const icon = state.playbackState === 'paused' ? '⏸' : '▶';
-    lines.push(`${icon} **${title}** — ${artist} [${pos}/${dur}]`);
+    const label = title && artist ? `**${title}** — ${artist}` : title ? `**${title}**` : '';
+    lines.push(`${icon}${label ? ` ${label}` : ''} [${pos}/${dur}]`);
     pruneTrackMeta(currentIndex);
   } else {
     lines.push('Nothing playing.');
@@ -40,9 +49,10 @@ export const queueCommand: CommandHandler = async (message, args, ctx) => {
       const absoluteIndex = nextOffset + i;
       const cols = item.columns;
       const stored = getTrackMeta(absoluteIndex, cols[3]);
-      const artist = stored ? stored.artists[0] ?? 'Unknown' : (cols[0] || 'Unknown');
-      const title = stored ? stored.title : (cols[1] || 'Unknown');
-      lines.push(`**${i + 1}.** ${title} — ${artist}`);
+      const artist = stored ? (stored.artists[0] ?? '') : cleanLabel(cols[0], '');
+      const title = stored ? stored.title : cleanLabel(cols[1], '');
+      const label = title && artist ? `${title} — ${artist}` : title || artist || '';
+      lines.push(`**${i + 1}.** ${label}`);
     });
   } else {
     lines.push('Queue is empty.');

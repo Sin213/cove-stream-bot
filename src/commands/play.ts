@@ -9,17 +9,16 @@ import type { TrackMatch } from '../monochrome/types.js';
 function formatStreamError(reason: string | undefined, primary: string | undefined): string {
   switch (reason) {
     case 'PREVIEW_ONLY':
-      return 'Stream unavailable: TIDAL returned preview-only. Worker credentials need an active subscription.';
+      return "Couldn't stream that track — TIDAL only returned a preview. Try a different quality or track.";
     case 'CREDENTIAL_EXPIRED':
-      return 'Stream unavailable: worker credentials expired. REFRESH_TOKEN needs updating.';
+      return "Couldn't stream — worker credentials have expired. Contact the bot owner.";
     case 'REQUIRES_SUBSCRIPTION':
-      return 'Stream unavailable: track requires an active subscription.';
+      return "Couldn't stream — track requires a subscription that isn't available. Try again or search for a different version.";
     case 'MANIFEST_ONLY':
-      return 'Stream unavailable: DRM manifest with no direct URL. Format not supported by player.';
+      return "Couldn't stream — track is DRM-encrypted and can't be played directly. Try again or search for a different version.";
     default: {
-      const lines = [`Failed to get stream from Monochrome.`, `Reason: ${reason ?? 'UNKNOWN'}`];
-      if (primary) lines.push(`Primary failure: ${primary}`);
-      return lines.join('\n');
+      const detail = primary ? ` (${primary})` : '';
+      return `Couldn't reach any stream mirrors${detail}. Try again in a moment.`;
     }
   }
 }
