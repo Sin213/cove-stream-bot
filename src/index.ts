@@ -244,10 +244,25 @@ async function main() {
     if (!vcChannel || !('members' in vcChannel)) return;
 
     const members = (vcChannel as any).members as Map<string, { user: { bot: boolean } }>;
-    const eligible = [...members.values()].filter(m => !m.user.bot).length;
+    const hasWhitelist = CONFIG.APPROVED_USER_IDS.size > 0;
+
+    const vcNonBotIds = [...members.entries()]
+      .filter(([, m]) => !m.user.bot)
+      .map(([id]) => id);
+
+    const eligible = hasWhitelist
+      ? vcNonBotIds.filter(id => CONFIG.APPROVED_USER_IDS.has(id)).length
+      : vcNonBotIds.length;
     if (eligible === 0) return;
 
-    const votes = (reaction.count ?? 1) - 1; // subtract bot's own reaction
+    let votes: number;
+    if (hasWhitelist) {
+      const reactors = await reaction.users.fetch();
+      votes = reactors.filter(u => !u.bot && CONFIG.APPROVED_USER_IDS.has(u.id)).size;
+    } else {
+      votes = (reaction.count ?? 1) - 1;
+    }
+
     if (votes * 2 > eligible) {
       voteSkipMessageId = null;
       await beefweb.next().catch(() => {});
