@@ -1,9 +1,12 @@
 import { Client, ActivityType } from 'discord.js';
 import { BeefwebClient } from '../beefweb/client.js';
 import { getTrackMeta } from '../monochrome/trackMeta.js';
+import type { TrackMeta } from '../monochrome/trackMeta.js';
 import { CONFIG } from '../config.js';
+import { pushHistory } from '../history/store.js';
+import { advanceQueue } from '../queue/store.js';
 
-type TrackChangeCallback = (title: string, artist: string) => void | Promise<void>;
+type TrackChangeCallback = (title: string, artist: string, meta?: TrackMeta) => void | Promise<void>;
 
 let lastSignature = '';
 
@@ -37,13 +40,16 @@ export function startPresenceSync(
       if (signature === lastSignature) return;
 
       lastSignature = signature;
+      advanceQueue();
+      pushHistory(title, artist ? [artist] : []);
+
       const name = artist ? `${artist} — ${title}` : title;
       client.user?.setPresence({
         activities: [{ name, type: ActivityType.Listening }],
         status: 'online',
       });
 
-      if (onTrackChange) await onTrackChange(title, artist);
+      if (onTrackChange) await onTrackChange(title, artist, stored ?? undefined);
     } catch {
       // Beefweb unreachable — silently skip this tick
     }

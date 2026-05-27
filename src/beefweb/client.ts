@@ -107,4 +107,15 @@ export class BeefwebClient {
     if (playlists.length > 0) return playlists[0].id;
     throw new Error('No playlists exist in the player');
   }
+
+  async shuffle(playlistId: string): Promise<void> {
+    await this.request(`/api/playlists/${playlistId}/items/sort`, 'POST', { by: 'random' });
+  }
+
+  async setVolume(percent: number): Promise<void> {
+    const state = await this.getPlayerState();
+    const { min, max } = state.volume;
+    const value = min + (Math.max(0, Math.min(100, percent)) / 100) * (max - min);
+    await this.request('/api/player', 'POST', { volume: value });
+  }
 }

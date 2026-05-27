@@ -116,17 +116,25 @@ export class MonochromeClient {
     const items = data?.data?.items;
     if (!Array.isArray(items)) return [];
 
-    return items.map((item: any) => ({
-      tidalId: item.id,
-      title: item.title ?? 'Unknown',
-      artists: Array.isArray(item.artists) && item.artists.length > 0
-        ? item.artists.map((a: any) => a.name ?? 'Unknown')
-        : item.artist?.name ? [item.artist.name] : [],
-      album: item.album?.title ?? 'Unknown',
-      durationSec: item.duration ?? 0,
-      quality: item.audioQuality ?? 'UNKNOWN',
-      isrc: typeof item.isrc === 'string' ? item.isrc : undefined,
-    }));
+    return items.map((item: any) => {
+      let albumArtUrl: string | undefined;
+      const cover = item.album?.cover ?? item.cover;
+      if (typeof cover === 'string' && cover.length > 0) {
+        albumArtUrl = `https://resources.tidal.com/images/${cover.replace(/-/g, '/')}/320x320.jpg`;
+      }
+      return {
+        tidalId: item.id,
+        title: item.title ?? 'Unknown',
+        artists: Array.isArray(item.artists) && item.artists.length > 0
+          ? item.artists.map((a: any) => a.name ?? 'Unknown')
+          : item.artist?.name ? [item.artist.name] : [],
+        album: item.album?.title ?? 'Unknown',
+        durationSec: item.duration ?? 0,
+        quality: item.audioQuality ?? 'UNKNOWN',
+        isrc: typeof item.isrc === 'string' ? item.isrc : undefined,
+        albumArtUrl,
+      };
+    });
   }
 
   async getStreamUrl(tidalId: number, quality?: string, isrc?: string): Promise<string> {
@@ -333,5 +341,12 @@ export class MonochromeClient {
       (err as any).primaryFailure = summary.primary;
       throw err;
     }
+  }
+
+  getMirrorStats(): { url: string; ok: number; total: number; rate: number }[] {
+    return [...this.baseURLs].map(base => {
+      const s = this.mirrorStats.get(base) ?? { ok: 0, total: 0 };
+      return { url: redactUrl(base), ok: s.ok, total: s.total, rate: s.total > 0 ? s.ok / s.total : 1 };
+    });
   }
 }

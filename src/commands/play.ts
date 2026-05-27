@@ -2,6 +2,9 @@ import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
 import { getSearchResult } from '../monochrome/selection.js';
 import { setTrackMeta } from '../monochrome/trackMeta.js';
+import { appendToQueue } from '../queue/store.js';
+import { isStreamingLink, resolveStreamingLink } from '../resolve/links.js';
+import type { TrackMatch } from '../monochrome/types.js';
 
 function formatStreamError(reason: string | undefined, primary: string | undefined): string {
   switch (reason) {
@@ -21,7 +24,63 @@ function formatStreamError(reason: string | undefined, primary: string | undefin
   }
 }
 
+async function queueTrack(
+  message: Parameters<CommandHandler>[0],
+  ctx: Parameters<CommandHandler>[2],
+  result: TrackMatch,
+): Promise<void> {
+  let url: string;
+  try {
+    url = await ctx.monochrome.getStreamUrl(result.tidalId, undefined, result.isrc);
+  } catch (err) {
+    const reason = (err as any)?.reason as string | undefined;
+    const primary = (err as any)?.primaryFailure as string | undefined;
+    await reply(message, formatStreamError(reason, primary));
+    return;
+  }
+
+  try {
+    const [playlists, state] = await Promise.all([
+      ctx.beefweb.getPlaylists(),
+      ctx.beefweb.getPlayerState(),
+    ]);
+    const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
+    if (!playlist) throw new Error('No playlists exist in the player');
+    const isPlaying = state.playbackState === 'playing';
+    const newIndex = playlist.itemCount;
+    await ctx.beefweb.addItems(playlist.id, [url], { play: !isPlaying });
+    setTrackMeta(newIndex, url, {
+      title: result.title,
+      artists: result.artists,
+      isrc: result.isrc,
+      albumArtUrl: result.albumArtUrl,
+    });
+    if (isPlaying) {
+      appendToQueue({ tidalId: result.tidalId, isrc: result.isrc, title: result.title, artists: result.artists });
+    }
+    const artist = result.artists[0] ?? 'Unknown';
+    const label = isPlaying ? '⏭ Queued' : '▶ Playing';
+    await reply(message, `${label}: ${result.title} — ${artist}`);
+  } catch (err) {
+    await reply(message, `Failed to queue track: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 export const playCommand: CommandHandler = async (message, args, ctx) => {
+  // Detect streaming links (Spotify / Apple Music)
+  if (args.length > 0 && isStreamingLink(args[0])) {
+    let resolved: TrackMatch | null = null;
+    try {
+      resolved = await resolveStreamingLink(args[0], ctx.monochrome);
+    } catch { /* fall through */ }
+    if (!resolved) {
+      await reply(message, 'Could not resolve that link. Try searching with `!search` instead.');
+      return;
+    }
+    await queueTrack(message, ctx, resolved);
+    return;
+  }
+
   const num = args.length > 0 ? parseInt(args[0], 10) : NaN;
 
   if (Number.isInteger(num) && num > 0) {
@@ -30,39 +89,7 @@ export const playCommand: CommandHandler = async (message, args, ctx) => {
       await reply(message, 'No search results found. Run `!search <query>` first.');
       return;
     }
-
-    let url: string;
-    try {
-      url = await ctx.monochrome.getStreamUrl(result.tidalId, undefined, result.isrc);
-    } catch (err) {
-      const reason = (err as any)?.reason as string | undefined;
-      const primary = (err as any)?.primaryFailure as string | undefined;
-      await reply(message, formatStreamError(reason, primary));
-      return;
-    }
-
-    let queued = false;
-    try {
-      const [playlists, state] = await Promise.all([
-        ctx.beefweb.getPlaylists(),
-        ctx.beefweb.getPlayerState(),
-      ]);
-      const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
-      if (!playlist) throw new Error('No playlists exist in the player');
-      const isPlaying = state.playbackState === 'playing';
-      const newIndex = playlist.itemCount;
-      await ctx.beefweb.addItems(playlist.id, [url], { play: !isPlaying });
-      setTrackMeta(newIndex, url, { title: result.title, artists: result.artists });
-      queued = isPlaying;
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      await reply(message, `Failed to queue track: ${msg}`);
-      return;
-    }
-
-    const artist = result.artists[0] ?? 'Unknown';
-    const label = queued ? '⏭ Queued' : '▶ Playing';
-    await reply(message, `${label}: ${result.title} — ${artist}`);
+    await queueTrack(message, ctx, result);
     return;
   }
 

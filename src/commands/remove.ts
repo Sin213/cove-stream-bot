@@ -1,6 +1,7 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
 import { getTrackMeta } from '../monochrome/trackMeta.js';
+import { removeFromQueue } from '../queue/store.js';
 
 export const removeCommand: CommandHandler = async (message, args, ctx) => {
   const n = parseInt(args[0] ?? '', 10);
@@ -29,5 +30,6 @@ export const removeCommand: CommandHandler = async (message, args, ctx) => {
   const artist = stored?.artists[0] || cols[0] || 'Unknown';
 
   await ctx.beefweb.removeItem(playlistId, absoluteIndex);
+  removeFromQueue(n - 1);
   await reply(message, `Removed: ${title} — ${artist}`);
 };

@@ -6,6 +6,7 @@ export interface TrackMatch {
   durationSec: number;
   quality: string;
   isrc?: string;
+  albumArtUrl?: string;
 }
 
 export interface StreamInfo {

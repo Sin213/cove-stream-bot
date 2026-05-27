@@ -1,4 +1,4 @@
-import { Events } from 'discord.js';
+import { Events, EmbedBuilder } from 'discord.js';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { CONFIG } from './config.js';
 import { createDiscordClient } from './discord/client.js';
@@ -6,10 +6,10 @@ import { registerCommand, getCommand } from './discord/commands.js';
 import type { Responder } from './discord/commands.js';
 import { registerSlashCommands } from './discord/slashCommands.js';
 import { BeefwebClient } from './beefweb/client.js';
-import { RelayManager } from './voice/relay.js';
-import { VoiceConnectionManager } from './voice/connection.js';
 import { startPresenceSync } from './presence/sync.js';
 import { MonochromeClient } from './monochrome/client.js';
+import { getGuildState, getAllGuildStates } from './guild/state.js';
+import { restoreQueue } from './queue/store.js';
 
 import { joinCommand } from './commands/join.js';
 import { leaveCommand } from './commands/leave.js';
@@ -29,7 +29,10 @@ import { autonpCommand } from './commands/autonp.js';
 import { clearQueueCommand } from './commands/clearqueue.js';
 import { whitelistCommand } from './commands/whitelist.js';
 import { blacklistCommand } from './commands/blacklist.js';
-import { getAnnounceChannelId } from './autonp/state.js';
+import { shuffleCommand } from './commands/shuffle.js';
+import { volumeCommand } from './commands/volume.js';
+import { historyCommand } from './commands/history.js';
+import { mirrorsCommand } from './commands/mirrors.js';
 
 registerCommand('join', joinCommand);
 registerCommand('leave', leaveCommand);
@@ -56,6 +59,11 @@ registerCommand('whitelist', whitelistCommand);
 registerCommand('wl', whitelistCommand);
 registerCommand('blacklist', blacklistCommand);
 registerCommand('bl', blacklistCommand);
+registerCommand('shuffle', shuffleCommand);
+registerCommand('volume', volumeCommand);
+registerCommand('vol', volumeCommand);
+registerCommand('history', historyCommand);
+registerCommand('mirrors', mirrorsCommand);
 
 const PREFIX = '!';
 
@@ -76,6 +84,10 @@ function slashArgs(interaction: ChatInputCommandInteraction): string[] {
       return [interaction.options.getString('query', true)];
     case 'remove':
       return [String(interaction.options.getInteger('position', true))];
+    case 'volume': {
+      const pct = interaction.options.getInteger('percent');
+      return pct !== null ? [String(pct)] : [];
+    }
     case 'whitelist':
     case 'blacklist': {
       const action = interaction.options.getString('action', true);
@@ -91,19 +103,20 @@ async function main() {
   const client = createDiscordClient();
   const beefweb = new BeefwebClient(CONFIG.BEEFWEB_BASE_URL);
   const monochrome = new MonochromeClient(CONFIG.MONOCHROME_API_BASE_URLS, CONFIG.MONOCHROME_QUALITY, CONFIG.QOBUZ_BASE_URLS);
-  const relayManager = new RelayManager();
-  const voiceManager = new VoiceConnectionManager();
 
   try {
     await beefweb.getPlayerState();
     console.log('Beefweb connection OK');
+    restoreQueue(beefweb, monochrome).catch(console.error);
   } catch {
     console.warn('Could not reach Beefweb — is DeaDBeeF running with the plugin?');
   }
 
   if (CONFIG.WEB_UI_ENABLED) {
+    // Use the default guild's relayManager for the web UI
+    const defaultGuildState = getGuildState(CONFIG.GUILD_ID);
     const { startWebServer } = await import('./web/server.js');
-    startWebServer(beefweb, relayManager, CONFIG.WEB_UI_PORT);
+    startWebServer(beefweb, defaultGuildState.relayManager, CONFIG.WEB_UI_PORT);
   }
 
   // Prefix commands (!play, !search, etc.)
@@ -123,12 +136,15 @@ async function main() {
     const handler = getCommand(commandName);
     if (!handler) return;
 
-    if (CONFIG.BLACKLISTED_USER_IDS.has(message.author.id)) return;
+    const guildId = message.guildId ?? '';
+    const guildState = getGuildState(guildId);
+
+    if (guildState.blacklistedUserIds.has(message.author.id)) return;
 
     if (
       PROTECTED_COMMANDS.has(commandName) &&
-      CONFIG.APPROVED_USER_IDS.size > 0 &&
-      !CONFIG.APPROVED_USER_IDS.has(message.author.id)
+      guildState.approvedUserIds.size > 0 &&
+      !guildState.approvedUserIds.has(message.author.id)
     ) {
       try {
         await message.reply('You are not authorized to use this command.');
@@ -138,6 +154,7 @@ async function main() {
 
     const responder: Responder = {
       userId: message.author.id,
+      guildId: message.guildId,
       channel: message.channel as Responder['channel'],
       member: message.member as Responder['member'],
       reply: async (content) => {
@@ -145,7 +162,13 @@ async function main() {
       },
     };
 
-    const ctx = { beefweb, monochrome, relayManager, voiceManager };
+    const ctx = {
+      beefweb,
+      monochrome,
+      relayManager: guildState.relayManager,
+      voiceManager: guildState.voiceManager,
+      guildState,
+    };
 
     try {
       await handler(responder, args, ctx);
@@ -164,15 +187,18 @@ async function main() {
     const handler = getCommand(interaction.commandName);
     if (!handler) return;
 
-    if (CONFIG.BLACKLISTED_USER_IDS.has(interaction.user.id)) {
+    const guildId = interaction.guildId ?? '';
+    const guildState = getGuildState(guildId);
+
+    if (guildState.blacklistedUserIds.has(interaction.user.id)) {
       await interaction.reply({ content: 'You are not authorized to use this command.', ephemeral: true });
       return;
     }
 
     if (
       PROTECTED_COMMANDS.has(interaction.commandName) &&
-      CONFIG.APPROVED_USER_IDS.size > 0 &&
-      !CONFIG.APPROVED_USER_IDS.has(interaction.user.id)
+      guildState.approvedUserIds.size > 0 &&
+      !guildState.approvedUserIds.has(interaction.user.id)
     ) {
       await interaction.reply({ content: 'You are not authorized to use this command.', ephemeral: true });
       return;
@@ -182,12 +208,19 @@ async function main() {
 
     const responder: Responder = {
       userId: interaction.user.id,
+      guildId: interaction.guildId,
       channel: interaction.channel as Responder['channel'],
       member: interaction.member as Responder['member'],
-      reply: async (content) => { await interaction.editReply(content); },
+      reply: async (content) => { await interaction.editReply(content as any); },
     };
 
-    const ctx = { beefweb, monochrome, relayManager, voiceManager };
+    const ctx = {
+      beefweb,
+      monochrome,
+      relayManager: guildState.relayManager,
+      voiceManager: guildState.voiceManager,
+      guildState,
+    };
 
     try {
       await handler(responder, slashArgs(interaction), ctx);
@@ -205,66 +238,66 @@ async function main() {
   const appId = client.application?.id ?? client.user!.id;
   registerSlashCommands(CONFIG.DISCORD_TOKEN, appId, CONFIG.GUILD_ID).catch(console.error);
 
-  let voteSkipMessageId: string | null = null;
+  startPresenceSync(client, beefweb, async (title, artist, meta) => {
+    // Reset all guild vote-skip message IDs on track change
+    for (const gs of getAllGuildStates()) {
+      gs.voteSkipMessageId = null;
+    }
 
-  startPresenceSync(client, beefweb, async (title, artist) => {
-    const text = artist ? `▶ **${title}** — ${artist}` : `▶ **${title}**`;
-    voteSkipMessageId = null;
+    // Build embed for autonp announcement
+    const embed = new EmbedBuilder()
+      .setTitle(title)
+      .setDescription(artist || '​')
+      .setColor(0x1db954)
+      .setFooter({ text: '▶ Now Playing' });
+    if (meta?.albumArtUrl) embed.setThumbnail(meta.albumArtUrl);
 
-    const announceChannelId = getAnnounceChannelId();
-    if (announceChannelId) {
+    // Announce to all guilds that have autonp enabled
+    for (const gs of getAllGuildStates()) {
+      if (!gs.announceChannelId) continue;
       try {
-        const ch = client.channels.cache.get(announceChannelId);
+        const ch = client.channels.cache.get(gs.announceChannelId);
         if (ch && 'send' in ch && typeof (ch as any).send === 'function') {
-          const msg = await (ch as any).send(text) as { id: string; react(e: string): Promise<unknown> };
-          voteSkipMessageId = msg.id;
+          const msg = await (ch as any).send({ embeds: [embed] }) as { id: string; react(e: string): Promise<unknown> };
+          gs.voteSkipMessageId = msg.id;
           await msg.react('⏭');
         }
       } catch { /* channel gone */ }
-    }
 
-    const vcChannelId = voiceManager.connection?.joinConfig.channelId;
-    if (vcChannelId) {
-      const status = artist ? `${title} — ${artist}` : title;
-      client.rest.put(`/channels/${vcChannelId}/voice-status`, { body: { status } })
-        .catch(() => { /* non-critical */ });
+      // Update VC status for this guild
+      const vcChannelId = gs.voiceManager.connection?.joinConfig.channelId;
+      if (vcChannelId) {
+        const status = artist ? `${title} — ${artist}` : title;
+        client.rest.put(`/channels/${vcChannelId}/voice-status`, { body: { status } })
+          .catch(() => { /* non-critical */ });
+      }
     }
   });
 
   // Vote-skip: majority of VC members reacting ⏭ on the autonp message skips the track
   client.on(Events.MessageReactionAdd, async (reaction, user) => {
     if (user.bot) return;
-    if (!voteSkipMessageId || reaction.message.id !== voteSkipMessageId) return;
     if (reaction.emoji.name !== '⏭') return;
 
-    const vcChannelId = voiceManager.connection?.joinConfig.channelId;
+    // Find which guild owns this vote-skip message
+    const guildStates = getAllGuildStates();
+    const gs = guildStates.find(s => s.voteSkipMessageId === reaction.message.id);
+    if (!gs) return;
+
+    const vcChannelId = gs.voiceManager.connection?.joinConfig.channelId;
     if (!vcChannelId) return;
 
     const vcChannel = client.channels.cache.get(vcChannelId);
     if (!vcChannel || !('members' in vcChannel)) return;
 
     const members = (vcChannel as any).members as Map<string, { user: { bot: boolean } }>;
-    const hasWhitelist = CONFIG.APPROVED_USER_IDS.size > 0;
-
-    const vcNonBotIds = [...members.entries()]
-      .filter(([, m]) => !m.user.bot)
-      .map(([id]) => id);
-
-    const eligible = hasWhitelist
-      ? vcNonBotIds.filter(id => CONFIG.APPROVED_USER_IDS.has(id)).length
-      : vcNonBotIds.length;
+    const eligible = [...members.values()].filter(m => !m.user.bot).length;
     if (eligible === 0) return;
 
-    let votes: number;
-    if (hasWhitelist) {
-      const reactors = await reaction.users.fetch();
-      votes = reactors.filter(u => !u.bot && CONFIG.APPROVED_USER_IDS.has(u.id)).size;
-    } else {
-      votes = (reaction.count ?? 1) - 1;
-    }
+    const votes = (reaction.count ?? 1) - 1;
 
     if (votes * 2 > eligible) {
-      voteSkipMessageId = null;
+      gs.voteSkipMessageId = null;
       await beefweb.next().catch(() => {});
       try {
         await (reaction.message.channel as any).send('The people have spoken! Skipped!');
@@ -274,7 +307,9 @@ async function main() {
   console.log('Bot is running');
 
   const shutdown = () => {
-    voiceManager.leave();
+    for (const gs of getAllGuildStates()) {
+      gs.voiceManager.leave();
+    }
     void client.destroy().then(() => process.exit(0)).catch(() => process.exit(0));
   };
   process.once('SIGTERM', shutdown);

@@ -1,6 +1,5 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
-import { CONFIG } from '../config.js';
 
 function parseUserId(mention: string): string | null {
   // Accepts raw ID or <@id> / <@!id> mention format
@@ -8,14 +7,14 @@ function parseUserId(mention: string): string | null {
   return match?.[1] ?? null;
 }
 
-export const whitelistCommand: CommandHandler = async (message, args, _ctx) => {
+export const whitelistCommand: CommandHandler = async (message, args, ctx) => {
   const sub = args[0]?.toLowerCase();
 
   if (sub === 'list') {
-    if (CONFIG.APPROVED_USER_IDS.size === 0) {
+    if (ctx.guildState.approvedUserIds.size === 0) {
       await reply(message, 'Whitelist is empty — all users can use protected commands.');
     } else {
-      const ids = [...CONFIG.APPROVED_USER_IDS].map(id => `<@${id}>`).join(', ');
+      const ids = [...ctx.guildState.approvedUserIds].map(id => `<@${id}>`).join(', ');
       await reply(message, `Whitelisted users: ${ids}`);
     }
     return;
@@ -34,10 +33,10 @@ export const whitelistCommand: CommandHandler = async (message, args, _ctx) => {
     }
 
     if (sub === 'add') {
-      CONFIG.APPROVED_USER_IDS.add(userId);
+      ctx.guildState.approvedUserIds.add(userId);
       await reply(message, `<@${userId}> added to whitelist.`);
     } else {
-      CONFIG.APPROVED_USER_IDS.delete(userId);
+      ctx.guildState.approvedUserIds.delete(userId);
       await reply(message, `<@${userId}> removed from whitelist.`);
     }
     return;

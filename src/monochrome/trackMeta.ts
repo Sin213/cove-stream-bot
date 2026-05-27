@@ -4,6 +4,8 @@ import { resolve } from 'path';
 export interface TrackMeta {
   title: string;
   artists: string[];
+  isrc?: string;
+  albumArtUrl?: string;
 }
 
 interface StoredEntry {
