@@ -31,7 +31,6 @@ import { clearQueueCommand } from './commands/clearqueue.js';
 import { whitelistCommand } from './commands/whitelist.js';
 import { blacklistCommand } from './commands/blacklist.js';
 import { shuffleCommand } from './commands/shuffle.js';
-import { volumeCommand } from './commands/volume.js';
 import { historyCommand } from './commands/history.js';
 import { mirrorsCommand } from './commands/mirrors.js';
 import { voteskipCommand } from './commands/voteskip.js';
@@ -62,8 +61,6 @@ registerCommand('wl', whitelistCommand);
 registerCommand('blacklist', blacklistCommand);
 registerCommand('bl', blacklistCommand);
 registerCommand('shuffle', shuffleCommand);
-registerCommand('volume', volumeCommand);
-registerCommand('vol', volumeCommand);
 registerCommand('history', historyCommand);
 registerCommand('mirrors', mirrorsCommand);
 registerCommand('voteskip', voteskipCommand);
@@ -73,7 +70,7 @@ const PREFIX = '!';
 
 const PROTECTED_COMMANDS = new Set([
   'join', 'leave', 'relay', 'play', 'pause', 'next', 'skip', 'prev', 'stop', 'remove', 'rm',
-  'clearqueue', 'cq', 'whitelist', 'wl', 'blacklist', 'bl', 'shuffle', 'volume', 'vol', 'restart',
+  'clearqueue', 'cq', 'whitelist', 'wl', 'blacklist', 'bl', 'shuffle', 'restart',
 ]);
 
 // messageId -> timestamp; evict entries older than 5 minutes
@@ -89,10 +86,6 @@ function slashArgs(interaction: ChatInputCommandInteraction): string[] {
       return [interaction.options.getString('query', true)];
     case 'remove':
       return [String(interaction.options.getInteger('position', true))];
-    case 'volume': {
-      const pct = interaction.options.getInteger('percent');
-      return pct !== null ? [String(pct)] : [];
-    }
     case 'whitelist':
     case 'blacklist': {
       const action = interaction.options.getString('action', true);

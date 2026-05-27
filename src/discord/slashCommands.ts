@@ -48,8 +48,6 @@ const definitions = [
     )
     .addUserOption(o => o.setName('user').setDescription('User to add or remove').setRequired(false)),
   new SlashCommandBuilder().setName('shuffle').setDescription('Shuffle the current queue'),
-  new SlashCommandBuilder().setName('volume').setDescription('Get or set the volume')
-    .addIntegerOption(o => o.setName('percent').setDescription('Volume level (0-100)').setRequired(false).setMinValue(0).setMaxValue(100)),
   new SlashCommandBuilder().setName('history').setDescription('Show recently played tracks'),
   new SlashCommandBuilder().setName('mirrors').setDescription('Show Monochrome mirror health stats'),
   new SlashCommandBuilder().setName('voteskip').setDescription('Post a vote to skip the current track'),
