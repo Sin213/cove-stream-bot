@@ -30,8 +30,6 @@ export const searchCommand: CommandHandler = async (message, args, ctx) => {
     return;
   }
 
-  setSearchResults(message.userId, results);
-
   const lines = results.map((t, i) =>
     `**${i + 1}.** ${t.title} — ${t.artists.join(', ') || 'Unknown'} — ${t.album} [${formatDuration(t.durationSec)}]`
   );
@@ -43,11 +41,14 @@ export const searchCommand: CommandHandler = async (message, args, ctx) => {
     if (next.length > LIMIT) break;
     content = next;
   }
+
   const ch = message.channel;
   if (ch && 'send' in ch) {
     const sent = await (ch as any).send(content) as { delete(): Promise<unknown> };
-    setTimeout(() => sent.delete().catch(() => {}), 60_000);
+    setSearchResults(message.userId, results, sent);
+    setTimeout(() => sent.delete().catch(() => {}), 10_000);
   } else {
+    setSearchResults(message.userId, results);
     await reply(message, content);
   }
 };

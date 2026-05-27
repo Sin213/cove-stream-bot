@@ -1,6 +1,6 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
-import { getSearchResult } from '../monochrome/selection.js';
+import { getSearchResult, consumeSearchMessage } from '../monochrome/selection.js';
 import { setTrackMeta } from '../monochrome/trackMeta.js';
 import { appendToQueue } from '../queue/store.js';
 import { isStreamingLink, resolveStreamingLink } from '../resolve/links.js';
@@ -88,6 +88,7 @@ export const playCommand: CommandHandler = async (message, args, ctx) => {
       await reply(message, 'No search results found. Run `!search <query>` first.');
       return;
     }
+    consumeSearchMessage(message.userId)?.delete().catch(() => {});
     await queueTrack(message, ctx, result);
     return;
   }

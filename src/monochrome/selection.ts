@@ -1,15 +1,18 @@
 import type { TrackMatch } from './types.js';
 
+interface Deletable { delete(): Promise<unknown> }
+
 interface StoredSearch {
   results: TrackMatch[];
   ts: number;
+  message?: Deletable;
 }
 
 const TTL_MS = 5 * 60 * 1000;
 const store = new Map<string, StoredSearch>();
 
-export function setSearchResults(userId: string, results: TrackMatch[]): void {
-  store.set(userId, { results, ts: Date.now() });
+export function setSearchResults(userId: string, results: TrackMatch[], message?: Deletable): void {
+  store.set(userId, { results, ts: Date.now(), message });
 }
 
 export function getSearchResult(userId: string, index: number): TrackMatch | null {
@@ -21,4 +24,11 @@ export function getSearchResult(userId: string, index: number): TrackMatch | nul
   }
   if (index < 1 || index > entry.results.length) return null;
   return entry.results[index - 1];
+}
+
+export function consumeSearchMessage(userId: string): Deletable | undefined {
+  const entry = store.get(userId);
+  const msg = entry?.message;
+  if (entry) entry.message = undefined;
+  return msg;
 }
