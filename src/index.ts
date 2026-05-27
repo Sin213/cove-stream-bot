@@ -10,6 +10,8 @@ import { startPresenceSync } from './presence/sync.js';
 import { MonochromeClient } from './monochrome/client.js';
 import { getGuildState, getAllGuildStates } from './guild/state.js';
 import { restoreQueue } from './queue/store.js';
+import { checkRateLimit } from './security/ratelimit.js';
+import { auditLog } from './security/audit.js';
 
 import { joinCommand } from './commands/join.js';
 import { leaveCommand } from './commands/leave.js';
@@ -69,10 +71,11 @@ const PREFIX = '!';
 
 const PROTECTED_COMMANDS = new Set([
   'join', 'leave', 'relay', 'play', 'pause', 'next', 'skip', 'prev', 'stop', 'remove', 'rm',
-  'clearqueue', 'cq', 'whitelist', 'wl', 'blacklist', 'bl',
+  'clearqueue', 'cq', 'whitelist', 'wl', 'blacklist', 'bl', 'shuffle', 'volume', 'vol', 'restart',
 ]);
 
-const handledMessageIds = new Set<string>();
+// messageId -> timestamp; evict entries older than 5 minutes
+const handledMessageIds = new Map<string, number>();
 
 function slashArgs(interaction: ChatInputCommandInteraction): string[] {
   switch (interaction.commandName) {
@@ -123,11 +126,14 @@ async function main() {
   client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
     if (!message.content.startsWith(PREFIX)) return;
+    const now = Date.now();
     if (handledMessageIds.has(message.id)) return;
-    handledMessageIds.add(message.id);
-    if (handledMessageIds.size > 1000) {
-      const first = handledMessageIds.values().next().value;
-      if (first !== undefined) handledMessageIds.delete(first);
+    handledMessageIds.set(message.id, now);
+    if (handledMessageIds.size > 500) {
+      const cutoff = now - 300_000;
+      for (const [id, ts] of handledMessageIds) {
+        if (ts < cutoff) handledMessageIds.delete(id);
+      }
     }
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
@@ -151,6 +157,14 @@ async function main() {
       } catch { /* channel gone */ }
       return;
     }
+
+    const rl = checkRateLimit(guildId, message.author.id, commandName);
+    if (!rl.allowed) {
+      try { await message.reply(rl.reason!); } catch { /* channel gone */ }
+      return;
+    }
+
+    auditLog(guildId, message.author.id, commandName, args);
 
     const responder: Responder = {
       userId: message.author.id,
@@ -203,6 +217,14 @@ async function main() {
       await interaction.reply({ content: 'You are not authorized to use this command.', ephemeral: true });
       return;
     }
+
+    const rl = checkRateLimit(guildId, interaction.user.id, interaction.commandName);
+    if (!rl.allowed) {
+      await interaction.reply({ content: rl.reason!, ephemeral: true });
+      return;
+    }
+
+    auditLog(guildId, interaction.user.id, interaction.commandName, slashArgs(interaction));
 
     await interaction.deferReply();
 

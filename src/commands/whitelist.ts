@@ -1,5 +1,6 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
+import { saveGuildState } from '../security/persist.js';
 
 function parseUserId(mention: string): string | null {
   // Accepts raw ID or <@id> / <@!id> mention format
@@ -39,6 +40,7 @@ export const whitelistCommand: CommandHandler = async (message, args, ctx) => {
       ctx.guildState.approvedUserIds.delete(userId);
       await reply(message, `<@${userId}> removed from whitelist.`);
     }
+    saveGuildState(ctx.guildState.guildId, ctx.guildState.approvedUserIds, ctx.guildState.blacklistedUserIds);
     return;
   }
 

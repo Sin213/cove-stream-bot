@@ -1,5 +1,6 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
+import { saveGuildState } from '../security/persist.js';
 
 function parseUserId(mention: string): string | null {
   const match = mention.match(/^<@!?(\d+)>$/) ?? mention.match(/^(\d+)$/);
@@ -33,12 +34,13 @@ export const blacklistCommand: CommandHandler = async (message, args, ctx) => {
 
     if (sub === 'add') {
       ctx.guildState.blacklistedUserIds.add(userId);
-      ctx.guildState.approvedUserIds.delete(userId); // remove from whitelist if present
+      ctx.guildState.approvedUserIds.delete(userId);
       await reply(message, `<@${userId}> blacklisted.`);
     } else {
       ctx.guildState.blacklistedUserIds.delete(userId);
       await reply(message, `<@${userId}> removed from blacklist.`);
     }
+    saveGuildState(ctx.guildState.guildId, ctx.guildState.approvedUserIds, ctx.guildState.blacklistedUserIds);
     return;
   }
 

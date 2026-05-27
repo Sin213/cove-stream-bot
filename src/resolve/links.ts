@@ -1,11 +1,15 @@
 import type { TrackMatch } from '../monochrome/types.js';
 import type { MonochromeClient } from '../monochrome/client.js';
 
-const SPOTIFY_RE = /open\.spotify\.com\/track\/([A-Za-z0-9]+)/;
-const APPLE_RE = /music\.apple\.com\/[a-z]{2}\/.*?\/(\d+)(?:\?i=(\d+))?/;
+const ALLOWED_HOSTS = ['open.spotify.com', 'music.apple.com'];
 
 export function isStreamingLink(arg: string): boolean {
-  return SPOTIFY_RE.test(arg) || APPLE_RE.test(arg);
+  try {
+    const host = new URL(arg).hostname;
+    return ALLOWED_HOSTS.some(h => host === h);
+  } catch {
+    return false;
+  }
 }
 
 async function fetchOdesli(url: string): Promise<{ tidalId?: number; title?: string; artistName?: string } | null> {

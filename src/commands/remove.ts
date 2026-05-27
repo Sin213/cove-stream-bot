@@ -5,7 +5,7 @@ import { removeFromQueue } from '../queue/store.js';
 
 export const removeCommand: CommandHandler = async (message, args, ctx) => {
   const n = parseInt(args[0] ?? '', 10);
-  if (!Number.isInteger(n) || n < 1) {
+  if (!Number.isInteger(n) || n < 1 || n > 500) {
     await reply(message, 'Usage: `!remove <position>` — position matches numbers shown in `!queue`');
     return;
   }

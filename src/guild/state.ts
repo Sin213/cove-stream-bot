@@ -1,6 +1,7 @@
 import { VoiceConnectionManager } from '../voice/connection.js';
 import { RelayManager } from '../voice/relay.js';
 import { CONFIG } from '../config.js';
+import { loadGuildState } from '../security/persist.js';
 
 export class GuildState {
   readonly guildId: string;
@@ -15,8 +16,9 @@ export class GuildState {
     this.guildId = guildId;
     this.voiceManager = new VoiceConnectionManager();
     this.relayManager = new RelayManager();
-    this.approvedUserIds = new Set(CONFIG.APPROVED_USER_IDS);
-    this.blacklistedUserIds = new Set(CONFIG.BLACKLISTED_USER_IDS);
+    const persisted = loadGuildState(guildId);
+    this.approvedUserIds = new Set(persisted?.approvedUserIds ?? CONFIG.APPROVED_USER_IDS);
+    this.blacklistedUserIds = new Set(persisted?.blacklistedUserIds ?? CONFIG.BLACKLISTED_USER_IDS);
   }
 }
 
