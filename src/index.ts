@@ -28,6 +28,7 @@ import { restartCommand } from './commands/restart.js';
 import { autonpCommand } from './commands/autonp.js';
 import { clearQueueCommand } from './commands/clearqueue.js';
 import { whitelistCommand } from './commands/whitelist.js';
+import { blacklistCommand } from './commands/blacklist.js';
 import { getAnnounceChannel } from './autonp/state.js';
 
 registerCommand('join', joinCommand);
@@ -53,12 +54,14 @@ registerCommand('clearqueue', clearQueueCommand);
 registerCommand('cq', clearQueueCommand);
 registerCommand('whitelist', whitelistCommand);
 registerCommand('wl', whitelistCommand);
+registerCommand('blacklist', blacklistCommand);
+registerCommand('bl', blacklistCommand);
 
 const PREFIX = '!';
 
 const PROTECTED_COMMANDS = new Set([
   'join', 'leave', 'relay', 'play', 'pause', 'next', 'skip', 'prev', 'stop', 'remove', 'rm',
-  'clearqueue', 'cq', 'whitelist', 'wl',
+  'clearqueue', 'cq', 'whitelist', 'wl', 'blacklist', 'bl',
 ]);
 
 const handledMessageIds = new Set<string>();
@@ -73,7 +76,8 @@ function slashArgs(interaction: ChatInputCommandInteraction): string[] {
       return [interaction.options.getString('query', true)];
     case 'remove':
       return [String(interaction.options.getInteger('position', true))];
-    case 'whitelist': {
+    case 'whitelist':
+    case 'blacklist': {
       const action = interaction.options.getString('action', true);
       const user = interaction.options.getUser('user');
       return user ? [action, user.id] : [action];
@@ -119,6 +123,8 @@ async function main() {
     const handler = getCommand(commandName);
     if (!handler) return;
 
+    if (CONFIG.BLACKLISTED_USER_IDS.has(message.author.id)) return;
+
     if (
       PROTECTED_COMMANDS.has(commandName) &&
       CONFIG.APPROVED_USER_IDS.size > 0 &&
@@ -157,6 +163,11 @@ async function main() {
 
     const handler = getCommand(interaction.commandName);
     if (!handler) return;
+
+    if (CONFIG.BLACKLISTED_USER_IDS.has(interaction.user.id)) {
+      await interaction.reply({ content: 'You are not authorized to use this command.', ephemeral: true });
+      return;
+    }
 
     if (
       PROTECTED_COMMANDS.has(interaction.commandName) &&

@@ -28,6 +28,12 @@ export const CONFIG = {
       .map(id => id.trim())
       .filter(id => id.length > 0)
   ),
+  BLACKLISTED_USER_IDS: new Set(
+    (process.env.BLACKLISTED_USER_IDS ?? '')
+      .split(',')
+      .map(id => id.trim())
+      .filter(id => id.length > 0)
+  ),
   OPUS_BITRATE: process.env.OPUS_BITRATE ?? '256k',
   MONOCHROME_API_BASE_URLS: (
     process.env.MONOCHROME_API_BASE_URLS ??
