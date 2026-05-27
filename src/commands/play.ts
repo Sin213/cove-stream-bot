@@ -23,7 +23,7 @@ function formatStreamError(reason: string | undefined, primary: string | undefin
   }
 }
 
-async function queueTrack(
+export async function queueTrack(
   message: Parameters<CommandHandler>[0],
   ctx: Parameters<CommandHandler>[2],
   result: TrackMatch,

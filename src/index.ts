@@ -34,6 +34,7 @@ import { shuffleCommand } from './commands/shuffle.js';
 import { historyCommand } from './commands/history.js';
 import { mirrorsCommand } from './commands/mirrors.js';
 import { voteskipCommand } from './commands/voteskip.js';
+import { autosearchCommand } from './commands/autosearch.js';
 
 registerCommand('join', joinCommand);
 registerCommand('leave', leaveCommand);
@@ -65,12 +66,14 @@ registerCommand('history', historyCommand);
 registerCommand('mirrors', mirrorsCommand);
 registerCommand('voteskip', voteskipCommand);
 registerCommand('vs', voteskipCommand);
+registerCommand('autosearch', autosearchCommand);
+registerCommand('as', autosearchCommand);
 
 const PREFIX = '!';
 
 const PROTECTED_COMMANDS = new Set([
   'join', 'leave', 'relay', 'play', 'pause', 'next', 'skip', 'prev', 'stop', 'remove', 'rm',
-  'clearqueue', 'cq', 'whitelist', 'wl', 'blacklist', 'bl', 'shuffle', 'restart',
+  'clearqueue', 'cq', 'whitelist', 'wl', 'blacklist', 'bl', 'shuffle', 'restart', 'autosearch', 'as',
 ]);
 
 // messageId -> timestamp; evict entries older than 5 minutes
