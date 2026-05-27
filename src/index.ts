@@ -229,7 +229,8 @@ async function main() {
 
     auditLog(guildId, interaction.user.id, interaction.commandName, slashArgs(interaction));
 
-    await interaction.deferReply();
+    const ephemeral = interaction.commandName === 'search';
+    await interaction.deferReply({ ephemeral });
 
     const responder: Responder = {
       userId: interaction.user.id,

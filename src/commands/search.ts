@@ -43,5 +43,11 @@ export const searchCommand: CommandHandler = async (message, args, ctx) => {
     if (next.length > LIMIT) break;
     content = next;
   }
-  await reply(message, content);
+  const ch = message.channel;
+  if (ch && 'send' in ch) {
+    const sent = await (ch as any).send(content) as { delete(): Promise<unknown> };
+    setTimeout(() => sent.delete().catch(() => {}), 60_000);
+  } else {
+    await reply(message, content);
+  }
 };
