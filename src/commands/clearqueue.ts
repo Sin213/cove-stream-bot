@@ -1,31 +1,22 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
-import { clearQueueStore } from '../queue/store.js';
+import { clearQueueStore, getQueueEntries } from '../queue/store.js';
 
 export const clearQueueCommand: CommandHandler = async (message, _args, ctx) => {
-  const [state, playlists] = await Promise.all([
-    ctx.player.getPlayerState(),
-    ctx.player.getPlaylists(),
-  ]);
-
-  const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
-  if (!playlist) {
-    await reply(message, 'No playlist found.');
+  const queueLen = getQueueEntries().length;
+  if (queueLen === 0) {
+    await reply(message, 'Queue is already empty.');
     return;
   }
 
+  const state = await ctx.player.getPlayerState();
   const currentIndex = state.activeItem?.index ?? -1;
-  const isPlaying = state.playbackState !== 'stopped' && currentIndex >= 0;
 
-  if (isPlaying) {
-    // Keep current track, remove everything after it
-    const remaining = playlist.itemCount - (currentIndex + 1);
-    await ctx.player.clearItems(playlist.id, currentIndex + 1, remaining);
-    clearQueueStore();
-    await reply(message, `Queue cleared. Current track kept.`);
-  } else {
-    await ctx.player.clearItems(playlist.id, 0, playlist.itemCount);
-    clearQueueStore();
-    await reply(message, 'Queue cleared.');
+  if (currentIndex >= 0) {
+    const playlistId = state.activeItem.playlistId;
+    await ctx.player.clearItems(playlistId, currentIndex + 1, queueLen);
   }
+
+  clearQueueStore();
+  await reply(message, `Cleared ${queueLen} queued track${queueLen === 1 ? '' : 's'}.`);
 };
