@@ -58,6 +58,7 @@ export const localCommand: CommandHandler = async (message, args, ctx) => {
 
   const playlists = await ctx.player.getPlaylists();
   const matches: LocalResult[] = [];
+  const seenPaths = new Set<string>();
   const MAX_RESULTS = 10;
 
   for (const pl of playlists) {
@@ -70,8 +71,10 @@ export const localCommand: CommandHandler = async (message, args, ctx) => {
       const album = cols[2] || 'Unknown';
       const path = cols[3] || '';
       if (path.startsWith('http')) continue;
+      if (seenPaths.has(path)) continue;
       const haystack = `${artist} ${title}`.toLowerCase();
       if (query.split(/\s+/).every(word => haystack.includes(word))) {
+        seenPaths.add(path);
         matches.push({ playlistId: pl.id, index: i, title, artist, album, path });
         if (matches.length >= MAX_RESULTS) break;
       }
