@@ -100,8 +100,9 @@ All commands work as both prefix (`!command`) and slash (`/command`).
 
 | Command | Description |
 |---------|-------------|
-| `search <query>` | Search for tracks (Monochrome API) |
+| `search <query>` | Search for tracks online (Monochrome API) |
 | `autosearch <query>` | Search and queue the first result |
+| `local <query>` | Search the local player library |
 
 ### Info
 
@@ -120,6 +121,7 @@ All commands work as both prefix (`!command`) and slash (`/command`).
 | `voteskip` | Vote to skip the current track |
 | `whitelist <user>` | Add a user to the whitelist |
 | `blacklist <user>` | Block a user from commands |
+| `monochrome on/off` | Toggle online search (local-only mode) |
 
 ## Configuration
 
