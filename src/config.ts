@@ -38,11 +38,11 @@ export const CONFIG = {
   OPUS_BITRATE: process.env.OPUS_BITRATE ?? '256k',
   MONOCHROME_API_BASE_URLS: (
     process.env.MONOCHROME_API_BASE_URLS ??
-    'https://tidal.squid.wtf,https://api.monochrome.tf,https://monochrome-api.samidy.com,https://hifi.geeked.wtf,https://wolf.qqdl.site,https://maus.qqdl.site,https://vogel.qqdl.site,https://katze.qqdl.site,https://hund.qqdl.site,https://tidal.kinoplus.online'
+    'https://monochrome-api.samidy.com,https://tidal.squid.wtf'
   ).split(',').map(u => u.trim()).filter(u => u.length > 0),
   MONOCHROME_QUALITY: process.env.MONOCHROME_QUALITY ?? 'HIGH',
   MONOCHROME_SEARCH_LIMIT: parseInt(process.env.MONOCHROME_SEARCH_LIMIT ?? '8', 10),
   QOBUZ_BASE_URLS: (
-    process.env.QOBUZ_BASE_URLS ?? 'https://qobuz.kennyy.com.br,https://mono.scavengerfurs.net,https://qdl-api.monochrome.tf'
+    process.env.QOBUZ_BASE_URLS ?? 'https://qobuz.kennyy.com.br,https://qobuz.squid.wtf'
   ).split(',').map(u => u.trim()).filter(u => u.length > 0),
 } as const;
