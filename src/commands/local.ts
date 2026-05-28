@@ -1,11 +1,14 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
+import { clearSearchResults } from '../monochrome/selection.js';
 
-interface LocalResult {
+export interface LocalResult {
   playlistId: string;
   index: number;
   title: string;
   artist: string;
+  album: string;
+  path: string;
 }
 
 interface Deletable { delete(): Promise<unknown> }
@@ -21,6 +24,10 @@ const store = new Map<string, StoredLocal>();
 
 export function setLocalResults(userId: string, results: LocalResult[], message?: Deletable): void {
   store.set(userId, { results, ts: Date.now(), message });
+}
+
+export function clearLocalResults(userId: string): void {
+  store.delete(userId);
 }
 
 export function getLocalResult(userId: string, index: number): LocalResult | null {
@@ -42,6 +49,7 @@ export function consumeLocalMessage(userId: string): Deletable | undefined {
 }
 
 export const localCommand: CommandHandler = async (message, args, ctx) => {
+  clearSearchResults(message.userId);
   const query = args.join(' ').trim().toLowerCase();
   if (!query) {
     await reply(message, 'Usage: `!local <query>` — search your local player library');
@@ -59,11 +67,12 @@ export const localCommand: CommandHandler = async (message, args, ctx) => {
       const cols = items[i].columns;
       const artist = cols[0] || 'Unknown';
       const title = cols[1] || 'Unknown';
+      const album = cols[2] || 'Unknown';
       const path = cols[3] || '';
       if (path.startsWith('http')) continue;
       const haystack = `${artist} ${title}`.toLowerCase();
       if (query.split(/\s+/).every(word => haystack.includes(word))) {
-        matches.push({ playlistId: pl.id, index: i, title, artist });
+        matches.push({ playlistId: pl.id, index: i, title, artist, album, path });
         if (matches.length >= MAX_RESULTS) break;
       }
     }
@@ -78,7 +87,7 @@ export const localCommand: CommandHandler = async (message, args, ctx) => {
     `**${i + 1}.** ${m.title} — ${m.artist}`
   );
 
-  const content = lines.join('\n');
+  const content = lines.join('\n') + '\nPick a track with `!play <number>`.';
   const ch = message.channel;
   if (ch && 'send' in ch) {
     const sent = await (ch as any).send(content) as { delete(): Promise<unknown> };
@@ -88,6 +97,4 @@ export const localCommand: CommandHandler = async (message, args, ctx) => {
     setLocalResults(message.userId, matches);
     await reply(message, content);
   }
-
-  await reply(message, 'Pick a track with `!play <number>`.');
 };

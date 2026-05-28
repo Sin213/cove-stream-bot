@@ -6,9 +6,11 @@ A Discord bot that streams audio from a local music player (DeaDBeeF or foobar20
 
 - Stream audio from DeaDBeeF (Linux) or foobar2000 (Windows) to Discord
 - Full playback control: play, pause, stop, next, prev, restart, shuffle
-- Queue management with persistent state across restarts
-- Music search and streaming via Monochrome/Hi-Fi API (Tidal)
-- Now-playing embeds with album art
+- Queue system that works with both local and online tracks
+- Local library search — browse and queue tracks from your player
+- Online search and streaming via Monochrome/Hi-Fi API (Tidal/Qobuz)
+- Toggle between online and local-only mode
+- Now-playing embeds with album art (fetched from player for local tracks)
 - Auto now-playing announcements
 - Vote-skip system
 - Per-user whitelist/blacklist access control
@@ -80,7 +82,7 @@ All commands work as both prefix (`!command`) and slash (`/command`).
 |---------|-------------|
 | `join` | Join voice channel and start streaming |
 | `leave` | Leave voice channel |
-| `play [url]` | Resume playback or play a URL |
+| `play [url/number]` | Resume playback, play a URL, or pick from search/local results |
 | `pause` | Pause playback |
 | `stop` | Stop playback |
 | `next` | Next track |

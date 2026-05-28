@@ -2,6 +2,7 @@ import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
 import { CONFIG } from '../config.js';
 import { setSearchResults } from '../monochrome/selection.js';
+import { clearLocalResults } from './local.js';
 
 function formatDuration(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -14,6 +15,7 @@ export const searchCommand: CommandHandler = async (message, args, ctx) => {
     await reply(message, 'Online search is disabled. Use `!local <query>` or `!monochrome on` to re-enable.');
     return;
   }
+  clearLocalResults(message.userId);
   const query = args.join(' ').trim();
   if (!query) {
     await reply(message, 'Usage: `!search <query>`');

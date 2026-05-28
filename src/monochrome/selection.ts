@@ -15,6 +15,10 @@ export function setSearchResults(userId: string, results: TrackMatch[], message?
   store.set(userId, { results, ts: Date.now(), message });
 }
 
+export function clearSearchResults(userId: string): void {
+  store.delete(userId);
+}
+
 export function getSearchResult(userId: string, index: number): TrackMatch | null {
   const entry = store.get(userId);
   if (!entry) return null;

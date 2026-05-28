@@ -2,7 +2,7 @@ import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
 import { getSearchResult, consumeSearchMessage } from '../monochrome/selection.js';
 import { setTrackMeta } from '../monochrome/trackMeta.js';
-import { appendToQueue } from '../queue/store.js';
+import { appendToQueue, getQueueEntries } from '../queue/store.js';
 import { isStreamingLink, resolveStreamingLink } from '../resolve/links.js';
 import type { TrackMatch } from '../monochrome/types.js';
 import { getLocalResult, consumeLocalMessage } from './local.js';
@@ -47,9 +47,10 @@ export async function queueTrack(
     const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
     if (!playlist) throw new Error('No playlists exist in the player');
     const isPlaying = state.playbackState === 'playing';
-    const newIndex = playlist.itemCount;
-    await ctx.player.addItems(playlist.id, [url], { play: !isPlaying });
-    setTrackMeta(newIndex, url, {
+    const currentIndex = state.activeItem?.index ?? -1;
+    const insertIndex = isPlaying ? currentIndex + 1 + getQueueEntries().length : playlist.itemCount;
+    await ctx.player.addItems(playlist.id, [url], { play: !isPlaying, index: insertIndex });
+    setTrackMeta(insertIndex, url, {
       title: result.title,
       artists: result.artists,
       isrc: result.isrc,
@@ -93,10 +94,30 @@ export const playCommand: CommandHandler = async (message, args, ctx) => {
     if (local) {
       consumeLocalMessage(message.userId)?.delete().catch(() => {});
       try {
-        await ctx.player.playItem(local.playlistId, local.index);
-        await reply(message, `▶ Playing: ${local.title} — ${local.artist}`);
+        const [playlists, state] = await Promise.all([
+          ctx.player.getPlaylists(),
+          ctx.player.getPlayerState(),
+        ]);
+        const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
+        if (!playlist) throw new Error('No playlists exist in the player');
+        const isPlaying = state.playbackState === 'playing';
+        const currentIndex = state.activeItem?.index ?? -1;
+        const targetIndex = isPlaying ? currentIndex + 1 + getQueueEntries().length : playlist.itemCount;
+        await ctx.player.copyItems(local.playlistId, [local.index], targetIndex);
+        setTrackMeta(targetIndex, local.path, {
+          title: local.title,
+          artists: [local.artist],
+        });
+        if (!isPlaying) {
+          await ctx.player.playItem(playlist.id, targetIndex);
+        }
+        if (isPlaying) {
+          appendToQueue({ title: local.title, artists: [local.artist], local: true });
+        }
+        const label = isPlaying ? '⏭ Queued' : '▶ Playing';
+        await reply(message, `${label}: ${local.title} — ${local.artist}`);
       } catch (err) {
-        await reply(message, `Failed to play local track: ${err instanceof Error ? err.message : String(err)}`);
+        await reply(message, `Failed to queue local track: ${err instanceof Error ? err.message : String(err)}`);
       }
       return;
     }

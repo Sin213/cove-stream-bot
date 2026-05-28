@@ -57,6 +57,7 @@ export interface PlayerBackend {
   getPlaylists(): Promise<Playlist[]>;
   getPlaylistItems(playlistId: string, offset?: number, count?: number): Promise<PlaylistItem[]>;
   addItems(playlistId: string, items: string[], opts?: { play?: boolean; index?: number }): Promise<void>;
+  copyItems(playlistId: string, items: number[], targetIndex: number): Promise<void>;
   removeItem(playlistId: string, index: number): Promise<void>;
   clearItems(playlistId: string, fromIndex: number, count: number): Promise<void>;
   getCurrentPlaylistId(): Promise<string>;

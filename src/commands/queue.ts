@@ -1,6 +1,7 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
 import { getTrackMeta, pruneTrackMeta } from '../monochrome/trackMeta.js';
+import { getQueueEntries } from '../queue/store.js';
 
 function fmt(sec: number): string {
   const m = Math.floor(sec / 60);
@@ -17,11 +18,7 @@ function cleanLabel(raw: string, fallback: string): string {
 }
 
 export const queueCommand: CommandHandler = async (message, args, ctx) => {
-  const [state, playlistId] = await Promise.all([
-    ctx.player.getPlayerState(),
-    ctx.player.getCurrentPlaylistId(),
-  ]);
-
+  const state = await ctx.player.getPlayerState();
   const currentIndex = state.activeItem?.index ?? -1;
   const lines: string[] = [];
 
@@ -40,20 +37,18 @@ export const queueCommand: CommandHandler = async (message, args, ctx) => {
     lines.push('Nothing playing.');
   }
 
-  const nextOffset = currentIndex >= 0 ? currentIndex + 1 : 0;
-  const upcoming = await ctx.player.getPlaylistItems(playlistId, nextOffset, 10);
+  const entries = getQueueEntries();
 
-  if (upcoming.length > 0) {
+  if (entries.length > 0) {
     lines.push('');
-    upcoming.forEach((item, i) => {
-      const absoluteIndex = nextOffset + i;
-      const cols = item.columns;
-      const stored = getTrackMeta(absoluteIndex, cols[3]);
-      const artist = stored ? (stored.artists[0] ?? '') : cleanLabel(cols[0], '');
-      const title = stored ? stored.title : cleanLabel(cols[1], '');
-      const label = title && artist ? `${title} — ${artist}` : title || artist || '';
+    entries.slice(0, 10).forEach((entry, i) => {
+      const artist = entry.artists[0] ?? '';
+      const label = entry.title && artist ? `${entry.title} — ${artist}` : entry.title || artist || '';
       lines.push(`**${i + 1}.** ${label}`);
     });
+    if (entries.length > 10) {
+      lines.push(`*…and ${entries.length - 10} more*`);
+    }
   } else {
     lines.push('Queue is empty.');
   }

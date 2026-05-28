@@ -19,5 +19,11 @@ export const joinCommand: CommandHandler = async (message, _args, ctx) => {
   }
 
   ctx.relayManager.start(ctx.voiceManager.player);
-  await reply(message, `Joined **${member?.voice.channel?.name ?? 'voice channel'}** and relaying audio.`);
+  const ch = message.channel;
+  if (ch && 'send' in ch) {
+    const sent = await (ch as any).send(`Joined **${member?.voice.channel?.name ?? 'voice channel'}** and relaying audio.`);
+    setTimeout(() => sent.delete().catch(() => {}), 5_000);
+  } else {
+    await reply(message, `Joined **${member?.voice.channel?.name ?? 'voice channel'}** and relaying audio.`);
+  }
 };

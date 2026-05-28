@@ -5,10 +5,11 @@ import type { PlayerBackend } from '../player/types.js';
 import { setTrackMeta } from '../monochrome/trackMeta.js';
 
 export interface QueueEntry {
-  tidalId: number;
+  tidalId?: number;
   isrc?: string;
   title: string;
   artists: string[];
+  local?: boolean;
 }
 
 const PERSIST_PATH = resolve(process.cwd(), 'queue.json');
@@ -90,17 +91,18 @@ export function getQueueEntries(): QueueEntry[] {
 }
 
 export async function restoreQueue(player: PlayerBackend, monochrome: MonochromeClient): Promise<void> {
-  if (_queue.length === 0) return;
+  const restorable = _queue.filter(e => e.tidalId != null);
+  if (restorable.length === 0) return;
   try {
     const playlists = await player.getPlaylists();
     const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
-    if (!playlist || playlist.itemCount > 0) return; // don't restore if playlist has content
+    if (!playlist || playlist.itemCount > 0) return;
 
-    console.log(`[queue] Restoring ${_queue.length} queued track(s)…`);
+    console.log(`[queue] Restoring ${restorable.length} queued track(s)…`);
     const resolved = await mapLimited(
-      _queue,
+      restorable,
       RESTORE_CONCURRENCY,
-      entry => monochrome.getStreamUrl(entry.tidalId, undefined, entry.isrc)
+      entry => monochrome.getStreamUrl(entry.tidalId!, undefined, entry.isrc)
         .then(url => ({ entry, url }))
     );
     let index = 0;

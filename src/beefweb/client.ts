@@ -115,6 +115,11 @@ export class BeefwebClient implements PlayerBackend {
     this.invalidatePlaylistCache();
   }
 
+  async copyItems(playlistId: string, items: number[], targetIndex: number): Promise<void> {
+    await this.request(`/api/playlists/${playlistId}/items/copy`, 'POST', { items, targetIndex });
+    this.invalidatePlaylistCache();
+  }
+
   async removeItem(playlistId: string, index: number): Promise<void> {
     await this.request(`/api/playlists/${playlistId}/items/remove`, 'POST', { items: [index] });
     this.invalidatePlaylistCache();

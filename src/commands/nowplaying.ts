@@ -1,6 +1,7 @@
 import type { CommandHandler } from '../discord/commands.js';
-import { EmbedBuilder } from 'discord.js';
+import { AttachmentBuilder, EmbedBuilder } from 'discord.js';
 import { getTrackMeta } from '../monochrome/trackMeta.js';
+import { CONFIG } from '../config.js';
 
 function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds <= 0) return '?:??';
@@ -65,7 +66,23 @@ export const nowplayingCommand: CommandHandler = async (message, _args, ctx) => 
   if (album) embed.addFields({ name: 'Album', value: album, inline: true });
   if (sourceUrl) embed.addFields({ name: 'Source', value: `[Open stream](${sourceUrl})`, inline: true });
 
-  if (stored?.albumArtUrl) embed.setThumbnail(stored.albumArtUrl);
+  const files: AttachmentBuilder[] = [];
+  if (stored?.albumArtUrl) {
+    embed.setThumbnail(stored.albumArtUrl);
+  } else if (!sourceUrl) {
+    try {
+      const playlistId = state.activeItem?.playlistId ?? 'p1';
+      const artRes = await fetch(
+        `${CONFIG.BEEFWEB_BASE_URL}/api/artwork/${playlistId}/${track.trackIndex}`,
+        { signal: AbortSignal.timeout(3000) },
+      );
+      if (artRes.ok) {
+        const buf = Buffer.from(await artRes.arrayBuffer());
+        files.push(new AttachmentBuilder(buf, { name: 'cover.jpg' }));
+        embed.setThumbnail('attachment://cover.jpg');
+      }
+    } catch { /* no artwork available */ }
+  }
 
-  await message.reply({ embeds: [embed] });
+  await message.reply({ embeds: [embed], files });
 };
