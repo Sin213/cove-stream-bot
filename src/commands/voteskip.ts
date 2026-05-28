@@ -3,7 +3,7 @@ import { EmbedBuilder } from 'discord.js';
 import { getTrackMeta } from '../monochrome/trackMeta.js';
 
 export const voteskipCommand: CommandHandler = async (responder, _args, ctx) => {
-  const track = await ctx.beefweb.getCurrentTrack();
+  const track = await ctx.player.getCurrentTrack();
   if (!track) {
     await responder.reply('Nothing is currently playing.');
     return;

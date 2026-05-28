@@ -4,8 +4,8 @@ import { clearQueueStore } from '../queue/store.js';
 
 export const clearQueueCommand: CommandHandler = async (message, _args, ctx) => {
   const [state, playlists] = await Promise.all([
-    ctx.beefweb.getPlayerState(),
-    ctx.beefweb.getPlaylists(),
+    ctx.player.getPlayerState(),
+    ctx.player.getPlaylists(),
   ]);
 
   const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
@@ -20,11 +20,11 @@ export const clearQueueCommand: CommandHandler = async (message, _args, ctx) => 
   if (isPlaying) {
     // Keep current track, remove everything after it
     const remaining = playlist.itemCount - (currentIndex + 1);
-    await ctx.beefweb.clearItems(playlist.id, currentIndex + 1, remaining);
+    await ctx.player.clearItems(playlist.id, currentIndex + 1, remaining);
     clearQueueStore();
     await reply(message, `Queue cleared. Current track kept.`);
   } else {
-    await ctx.beefweb.clearItems(playlist.id, 0, playlist.itemCount);
+    await ctx.player.clearItems(playlist.id, 0, playlist.itemCount);
     clearQueueStore();
     await reply(message, 'Queue cleared.');
   }

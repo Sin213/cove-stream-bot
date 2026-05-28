@@ -1,5 +1,5 @@
 import { Client, ActivityType } from 'discord.js';
-import { BeefwebClient } from '../beefweb/client.js';
+import type { PlayerBackend } from '../player/types.js';
 import { getTrackMeta } from '../monochrome/trackMeta.js';
 import type { TrackMeta } from '../monochrome/trackMeta.js';
 import { CONFIG } from '../config.js';
@@ -13,14 +13,14 @@ let syncRunning = false;
 
 export function startPresenceSync(
   client: Client,
-  beefweb: BeefwebClient,
+  player: PlayerBackend,
   onTrackChange?: TrackChangeCallback,
 ): NodeJS.Timeout {
   return setInterval(async () => {
     if (syncRunning) return;
     syncRunning = true;
     try {
-      const track = await beefweb.getCurrentTrack();
+      const track = await player.getCurrentTrack();
 
       if (!track) {
         if (lastSignature !== '') {

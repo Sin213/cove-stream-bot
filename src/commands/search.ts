@@ -10,6 +10,10 @@ function formatDuration(sec: number): string {
 }
 
 export const searchCommand: CommandHandler = async (message, args, ctx) => {
+  if (!ctx.monochrome.enabled) {
+    await reply(message, 'Online search is disabled. Use `!local <query>` or `!monochrome on` to re-enable.');
+    return;
+  }
   const query = args.join(' ').trim();
   if (!query) {
     await reply(message, 'Usage: `!search <query>`');

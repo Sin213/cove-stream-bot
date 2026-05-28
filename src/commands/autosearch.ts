@@ -4,6 +4,10 @@ import { CONFIG } from '../config.js';
 import { queueTrack } from './play.js';
 
 export const autosearchCommand: CommandHandler = async (message, args, ctx) => {
+  if (!ctx.monochrome.enabled) {
+    await reply(message, 'Online search is disabled. Use `!local <query>` or `!monochrome on` to re-enable.');
+    return;
+  }
   const query = args.join(' ').trim();
   if (!query) {
     await reply(message, 'Usage: `!autosearch <query>`');

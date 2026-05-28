@@ -18,8 +18,8 @@ function cleanLabel(raw: string, fallback: string): string {
 
 export const queueCommand: CommandHandler = async (message, args, ctx) => {
   const [state, playlistId] = await Promise.all([
-    ctx.beefweb.getPlayerState(),
-    ctx.beefweb.getCurrentPlaylistId(),
+    ctx.player.getPlayerState(),
+    ctx.player.getCurrentPlaylistId(),
   ]);
 
   const currentIndex = state.activeItem?.index ?? -1;
@@ -41,7 +41,7 @@ export const queueCommand: CommandHandler = async (message, args, ctx) => {
   }
 
   const nextOffset = currentIndex >= 0 ? currentIndex + 1 : 0;
-  const upcoming = await ctx.beefweb.getPlaylistItems(playlistId, nextOffset, 10);
+  const upcoming = await ctx.player.getPlaylistItems(playlistId, nextOffset, 10);
 
   if (upcoming.length > 0) {
     lines.push('');

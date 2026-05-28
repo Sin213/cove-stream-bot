@@ -94,6 +94,10 @@ export class MonochromeClient {
   private qobuzBaseURLs: string[];
   private mirrorStats = new Map<string, { ok: number; total: number }>();
   private statsPersistTimer: ReturnType<typeof setTimeout> | null = null;
+  private _enabled = true;
+
+  get enabled(): boolean { return this._enabled; }
+  set enabled(v: boolean) { this._enabled = v; }
 
   constructor(baseURLs: string[], quality: string, qobuzBaseURLs: string[] = []) {
     this.baseURLs = baseURLs.map(u => u.replace(/\/$/, ''));
@@ -172,27 +176,23 @@ export class MonochromeClient {
 
   async getStreamUrl(tidalId: number, quality?: string, isrc?: string): Promise<string> {
     const q = quality ?? this.quality;
-    const path = `/track/?id=${tidalId}&quality=${q}`;
-    let tidalError: Error | undefined;
 
-    try {
-      const data = await this.requestWithFailover(path) as Record<string, unknown>;
-      const url = this.extractStreamUrl(data);
-      if (url) return url;
-      const reason = this.classifyMissingUrl(data);
-      this.logStreamShapeDiag(tidalId, data, path, reason);
-      tidalError = new Error(`No playable URL in track response for ${tidalId}`);
-      (tidalError as any).reason = reason;
-    } catch (err) {
-      tidalError = err as Error;
-    }
-
+    // Prefer Qobuz — returns direct FLAC/MP3 URLs that DeaDBeeF can stream natively
     if (isrc && this.qobuzBaseURLs.length > 0) {
       const qobuzUrl = await this.tryQobuzFallback(isrc, q);
       if (qobuzUrl) return qobuzUrl;
     }
 
-    throw tidalError;
+    const path = `/track/?id=${tidalId}&quality=${q}`;
+    const data = await this.requestWithFailover(path) as Record<string, unknown>;
+    const url = this.extractStreamUrl(data);
+    if (url) return url;
+
+    const reason = this.classifyMissingUrl(data);
+    this.logStreamShapeDiag(tidalId, data, path, reason);
+    const err = new Error(`No playable URL in track response for ${tidalId}`);
+    (err as any).reason = reason;
+    throw err;
   }
 
   private qualityToQobuzFormat(quality: string): string {

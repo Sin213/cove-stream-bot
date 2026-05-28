@@ -5,6 +5,7 @@ import { setTrackMeta } from '../monochrome/trackMeta.js';
 import { appendToQueue } from '../queue/store.js';
 import { isStreamingLink, resolveStreamingLink } from '../resolve/links.js';
 import type { TrackMatch } from '../monochrome/types.js';
+import { getLocalResult, consumeLocalMessage } from './local.js';
 
 function formatStreamError(reason: string | undefined, primary: string | undefined): string {
   switch (reason) {
@@ -40,14 +41,14 @@ export async function queueTrack(
 
   try {
     const [playlists, state] = await Promise.all([
-      ctx.beefweb.getPlaylists(),
-      ctx.beefweb.getPlayerState(),
+      ctx.player.getPlaylists(),
+      ctx.player.getPlayerState(),
     ]);
     const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
     if (!playlist) throw new Error('No playlists exist in the player');
     const isPlaying = state.playbackState === 'playing';
     const newIndex = playlist.itemCount;
-    await ctx.beefweb.addItems(playlist.id, [url], { play: !isPlaying });
+    await ctx.player.addItems(playlist.id, [url], { play: !isPlaying });
     setTrackMeta(newIndex, url, {
       title: result.title,
       artists: result.artists,
@@ -68,6 +69,10 @@ export async function queueTrack(
 export const playCommand: CommandHandler = async (message, args, ctx) => {
   // Detect streaming links (Spotify / Apple Music)
   if (args.length > 0 && isStreamingLink(args[0])) {
+    if (!ctx.monochrome.enabled) {
+      await reply(message, 'Online search is disabled. Use `!monochrome on` to re-enable.');
+      return;
+    }
     let resolved: TrackMatch | null = null;
     try {
       resolved = await resolveStreamingLink(args[0], ctx.monochrome);
@@ -83,9 +88,22 @@ export const playCommand: CommandHandler = async (message, args, ctx) => {
   const num = args.length > 0 ? parseInt(args[0], 10) : NaN;
 
   if (Number.isInteger(num) && num > 0) {
+    // Check local results first, then online search results
+    const local = getLocalResult(message.userId, num);
+    if (local) {
+      consumeLocalMessage(message.userId)?.delete().catch(() => {});
+      try {
+        await ctx.player.playItem(local.playlistId, local.index);
+        await reply(message, `▶ Playing: ${local.title} — ${local.artist}`);
+      } catch (err) {
+        await reply(message, `Failed to play local track: ${err instanceof Error ? err.message : String(err)}`);
+      }
+      return;
+    }
+
     const result = getSearchResult(message.userId, num);
     if (!result) {
-      await reply(message, 'No search results found. Run `!search <query>` first.');
+      await reply(message, 'No search results found. Run `!search <query>` or `!local <query>` first.');
       return;
     }
     consumeSearchMessage(message.userId)?.delete().catch(() => {});
@@ -93,16 +111,16 @@ export const playCommand: CommandHandler = async (message, args, ctx) => {
     return;
   }
 
-  const state = await ctx.beefweb.getPlayerState();
+  const state = await ctx.player.getPlayerState();
   if (state.playbackState === 'playing') {
     await reply(message, 'Already playing.');
     return;
   }
   if (state.playbackState === 'paused') {
-    await ctx.beefweb.pauseToggle();
+    await ctx.player.pauseToggle();
     await reply(message, 'Playback resumed.');
     return;
   }
-  await ctx.beefweb.play();
+  await ctx.player.play();
   await reply(message, 'Playback started.');
 };

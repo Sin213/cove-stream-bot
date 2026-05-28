@@ -52,6 +52,10 @@ const definitions = [
   new SlashCommandBuilder().setName('voteskip').setDescription('Post a vote to skip the current track'),
   new SlashCommandBuilder().setName('autosearch').setDescription('Search and immediately queue the top result')
     .addStringOption(o => o.setName('query').setDescription('Artist, title, or album').setRequired(true)),
+  new SlashCommandBuilder().setName('local').setDescription('Search the local player library')
+    .addStringOption(o => o.setName('query').setDescription('Artist or title to search for').setRequired(true)),
+  new SlashCommandBuilder().setName('monochrome').setDescription('Toggle online search on or off')
+    .addStringOption(o => o.setName('action').setDescription('on or off').setRequired(false)),
 ];
 
 export async function registerSlashCommands(token: string, clientId: string, guildId: string): Promise<void> {

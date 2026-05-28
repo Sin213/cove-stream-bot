@@ -5,7 +5,7 @@ import { createDiscordClient } from './discord/client.js';
 import { registerCommand, getCommand } from './discord/commands.js';
 import type { Responder } from './discord/commands.js';
 import { registerSlashCommands } from './discord/slashCommands.js';
-import { BeefwebClient } from './beefweb/client.js';
+import { createPlayerBackend } from './player/factory.js';
 import { startPresenceSync } from './presence/sync.js';
 import { MonochromeClient } from './monochrome/client.js';
 import { getGuildState, getAllGuildStates } from './guild/state.js';
@@ -35,6 +35,8 @@ import { historyCommand } from './commands/history.js';
 import { mirrorsCommand } from './commands/mirrors.js';
 import { voteskipCommand } from './commands/voteskip.js';
 import { autosearchCommand } from './commands/autosearch.js';
+import { localCommand } from './commands/local.js';
+import { monochromeCommand } from './commands/monochrome.js';
 
 registerCommand('join', joinCommand);
 registerCommand('leave', leaveCommand);
@@ -68,6 +70,8 @@ registerCommand('voteskip', voteskipCommand);
 registerCommand('vs', voteskipCommand);
 registerCommand('autosearch', autosearchCommand);
 registerCommand('as', autosearchCommand);
+registerCommand('local', localCommand);
+registerCommand('monochrome', monochromeCommand);
 
 const PREFIX = '!';
 
@@ -103,22 +107,22 @@ function slashArgs(interaction: ChatInputCommandInteraction): string[] {
 
 async function main() {
   const client = createDiscordClient();
-  const beefweb = new BeefwebClient(CONFIG.BEEFWEB_BASE_URL);
+  const player = createPlayerBackend();
   const monochrome = new MonochromeClient(CONFIG.MONOCHROME_API_BASE_URLS, CONFIG.MONOCHROME_QUALITY, CONFIG.QOBUZ_BASE_URLS);
 
   try {
-    await beefweb.getPlayerState();
-    console.log('Beefweb connection OK');
-    restoreQueue(beefweb, monochrome).catch(console.error);
+    await player.getPlayerState();
+    console.log(`${player.name} connection OK`);
+    restoreQueue(player, monochrome).catch(console.error);
   } catch {
-    console.warn('Could not reach Beefweb — is DeaDBeeF running with the plugin?');
+    console.warn(`Could not reach ${player.name} — is the player running with its remote-control plugin?`);
   }
 
   if (CONFIG.WEB_UI_ENABLED) {
     // Use the default guild's relayManager for the web UI
     const defaultGuildState = getGuildState(CONFIG.GUILD_ID);
     const { startWebServer } = await import('./web/server.js');
-    startWebServer(beefweb, defaultGuildState.relayManager, CONFIG.WEB_UI_PORT);
+    startWebServer(player, defaultGuildState.relayManager, CONFIG.WEB_UI_PORT);
   }
 
   // Prefix commands (!play, !search, etc.)
@@ -176,7 +180,7 @@ async function main() {
     };
 
     const ctx = {
-      beefweb,
+      player,
       monochrome,
       relayManager: guildState.relayManager,
       voiceManager: guildState.voiceManager,
@@ -237,7 +241,7 @@ async function main() {
     };
 
     const ctx = {
-      beefweb,
+      player,
       monochrome,
       relayManager: guildState.relayManager,
       voiceManager: guildState.voiceManager,
@@ -260,7 +264,7 @@ async function main() {
   const appId = client.application?.id ?? client.user!.id;
   registerSlashCommands(CONFIG.DISCORD_TOKEN, appId, CONFIG.GUILD_ID).catch(console.error);
 
-  startPresenceSync(client, beefweb, async (title, artist, meta) => {
+  startPresenceSync(client, player, async (title, artist, meta) => {
     // Reset all guild vote-skip message IDs on track change
     for (const gs of getAllGuildStates()) {
       gs.voteSkipMessageId = null;
@@ -321,7 +325,7 @@ async function main() {
 
     if (votes * 2 > eligible) {
       gs.voteSkipMessageId = null;
-      await beefweb.next().catch(() => {});
+      await player.next().catch(() => {});
       try {
         await (reaction.message.channel as any).send('The people have spoken! Skipped!');
       } catch { /* channel gone */ }

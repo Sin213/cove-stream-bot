@@ -11,14 +11,14 @@ export const removeCommand: CommandHandler = async (message, args, ctx) => {
   }
 
   const [state, playlistId] = await Promise.all([
-    ctx.beefweb.getPlayerState(),
-    ctx.beefweb.getCurrentPlaylistId(),
+    ctx.player.getPlayerState(),
+    ctx.player.getCurrentPlaylistId(),
   ]);
 
   const currentIndex = state.activeItem?.index ?? -1;
   const absoluteIndex = (currentIndex >= 0 ? currentIndex + 1 : 0) + (n - 1);
 
-  const items = await ctx.beefweb.getPlaylistItems(playlistId, absoluteIndex, 1);
+  const items = await ctx.player.getPlaylistItems(playlistId, absoluteIndex, 1);
   if (!items.length) {
     await reply(message, `No track at position ${n}.`);
     return;
@@ -29,7 +29,7 @@ export const removeCommand: CommandHandler = async (message, args, ctx) => {
   const title = stored?.title || cols[1] || 'Unknown';
   const artist = stored?.artists[0] || cols[0] || 'Unknown';
 
-  await ctx.beefweb.removeItem(playlistId, absoluteIndex);
+  await ctx.player.removeItem(playlistId, absoluteIndex);
   removeFromQueue(n - 1);
   await reply(message, `Removed: ${title} — ${artist}`);
 };

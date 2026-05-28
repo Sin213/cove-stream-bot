@@ -1,10 +1,10 @@
 import express from 'express';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import type { BeefwebClient } from '../beefweb/client.js';
+import type { PlayerBackend } from '../player/types.js';
 import type { RelayManager } from '../voice/relay.js';
 
-export function startWebServer(beefweb: BeefwebClient, relay: RelayManager, port: number): void {
+export function startWebServer(player: PlayerBackend, relay: RelayManager, port: number): void {
   const app = express();
   const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -12,11 +12,12 @@ export function startWebServer(beefweb: BeefwebClient, relay: RelayManager, port
 
   app.get('/api/state', async (_req, res) => {
     try {
-      const player = await beefweb.getPlayerState();
-      const track = await beefweb.getCurrentTrack();
+      const state = await player.getPlayerState();
+      const track = await player.getCurrentTrack();
       res.json({
         relayRunning: relay.isRunning(),
-        playbackState: player.playbackState,
+        backend: player.name,
+        playbackState: state.playbackState,
         track,
       });
     } catch {

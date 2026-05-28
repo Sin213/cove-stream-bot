@@ -1,11 +1,11 @@
-import type { BeefwebClient } from '../beefweb/client.js';
+import type { PlayerBackend } from '../player/types.js';
 import type { MonochromeClient } from '../monochrome/client.js';
 import type { RelayManager } from '../voice/relay.js';
 import type { VoiceConnectionManager } from '../voice/connection.js';
 import type { GuildState } from '../guild/state.js';
 
 export interface CommandContext {
-  beefweb: BeefwebClient;
+  player: PlayerBackend;
   monochrome: MonochromeClient;
   relayManager: RelayManager;
   voiceManager: VoiceConnectionManager;

@@ -1,10 +1,12 @@
-import type { PlayerState, TrackInfo, Playlist, PlaylistItem } from './types.js';
+import type { PlayerBackend, PlayerState, TrackInfo, Playlist, PlaylistItem } from '../player/types.js';
 
 const COLUMNS = ['%artist%', '%title%', '%album%', '%path%'];
 const PLAYLIST_ID_TTL = 30_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
-export class BeefwebClient {
+export class BeefwebClient implements PlayerBackend {
+  readonly name = 'Beefweb';
+
   private baseURL: string;
   private _inflightState: Promise<PlayerState> | null = null;
   private _playlistIdCache: string | null = null;
@@ -43,6 +45,10 @@ export class BeefwebClient {
 
   async play(): Promise<void> {
     await this.request('/api/player/play', 'POST');
+  }
+
+  async playItem(playlistId: string, index: number): Promise<void> {
+    await this.request(`/api/player/play/${playlistId}/${index}`, 'POST');
   }
 
   async pause(): Promise<void> {

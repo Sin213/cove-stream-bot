@@ -1,7 +1,7 @@
 import { readFileSync, renameSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 import type { MonochromeClient } from '../monochrome/client.js';
-import type { BeefwebClient } from '../beefweb/client.js';
+import type { PlayerBackend } from '../player/types.js';
 import { setTrackMeta } from '../monochrome/trackMeta.js';
 
 export interface QueueEntry {
@@ -89,10 +89,10 @@ export function getQueueEntries(): QueueEntry[] {
   return [..._queue];
 }
 
-export async function restoreQueue(beefweb: BeefwebClient, monochrome: MonochromeClient): Promise<void> {
+export async function restoreQueue(player: PlayerBackend, monochrome: MonochromeClient): Promise<void> {
   if (_queue.length === 0) return;
   try {
-    const playlists = await beefweb.getPlaylists();
+    const playlists = await player.getPlaylists();
     const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
     if (!playlist || playlist.itemCount > 0) return; // don't restore if playlist has content
 
@@ -110,7 +110,7 @@ export async function restoreQueue(beefweb: BeefwebClient, monochrome: Monochrom
         console.warn(`[queue] Failed to restore "${entry?.title}":`, result.reason instanceof Error ? result.reason.message : result.reason);
       } else {
         const { entry, url } = result.value;
-        await beefweb.addItems(playlist.id, [url]);
+        await player.addItems(playlist.id, [url]);
         setTrackMeta(index, url, { title: entry.title, artists: entry.artists, isrc: entry.isrc });
       }
       index++;
