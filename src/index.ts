@@ -91,7 +91,12 @@ function slashArgs(interaction: ChatInputCommandInteraction): string[] {
     }
     case 'search':
     case 'autosearch':
+    case 'local':
       return [interaction.options.getString('query', true)];
+    case 'monochrome': {
+      const action = interaction.options.getString('action');
+      return action ? [action] : [];
+    }
     case 'remove':
       return [String(interaction.options.getInteger('position', true))];
     case 'whitelist':
