@@ -95,7 +95,7 @@ export const localCommand: CommandHandler = async (message, args, ctx) => {
   if (ch && 'send' in ch) {
     const sent = await (ch as any).send(content) as { delete(): Promise<unknown> };
     setLocalResults(message.userId, matches, sent);
-    setTimeout(() => sent.delete().catch(() => {}), 10_000);
+    setTimeout(() => sent.delete().catch(() => {}), 30_000);
   } else {
     setLocalResults(message.userId, matches);
     await reply(message, content);

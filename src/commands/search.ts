@@ -52,7 +52,7 @@ export const searchCommand: CommandHandler = async (message, args, ctx) => {
   if (ch && 'send' in ch) {
     const sent = await (ch as any).send(content) as { delete(): Promise<unknown> };
     setSearchResults(message.userId, results, sent);
-    setTimeout(() => sent.delete().catch(() => {}), 10_000);
+    setTimeout(() => sent.delete().catch(() => {}), 30_000);
   } else {
     setSearchResults(message.userId, results);
     await reply(message, content);
