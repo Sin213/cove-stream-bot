@@ -4,14 +4,12 @@ import { getTrackMeta } from '../monochrome/trackMeta.js';
 import type { TrackMeta } from '../monochrome/trackMeta.js';
 import { CONFIG } from '../config.js';
 import { pushHistory } from '../history/store.js';
-import { advanceQueue, getQueueEntries } from '../queue/store.js';
+import { advanceQueue } from '../queue/store.js';
 
 type TrackChangeCallback = (title: string, artist: string, meta?: TrackMeta) => void | Promise<void>;
 
 let lastSignature = '';
 let syncRunning = false;
-
-let lastTrackIndex = -1;
 
 export function startPresenceSync(
   client: Client,
@@ -50,22 +48,6 @@ export function startPresenceSync(
       if (signature === lastSignature) return;
 
       lastSignature = signature;
-
-      const expectedNext = lastTrackIndex >= 0 ? lastTrackIndex + 1 : -1;
-      const currentIndex = track.trackIndex;
-      if (
-        getQueueEntries().length > 0 &&
-        expectedNext >= 0 &&
-        currentIndex !== expectedNext
-      ) {
-        try {
-          const state = await player.getPlayerState();
-          await player.playItem(state.activeItem.playlistId, expectedNext);
-          lastTrackIndex = expectedNext;
-        } catch { /* fallback to natural order */ }
-        return;
-      }
-      lastTrackIndex = currentIndex;
       advanceQueue();
 
       if (artist || title) {
