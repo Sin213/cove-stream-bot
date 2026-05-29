@@ -1,5 +1,5 @@
 import type { CommandHandler } from '../discord/commands.js';
-import { reply } from '../discord/commands.js';
+import { reply, replyAndDelete } from '../discord/commands.js';
 import { getSearchResult, consumeSearchMessage } from '../monochrome/selection.js';
 import { setTrackMeta } from '../monochrome/trackMeta.js';
 import { appendToQueue, getQueueEntries } from '../queue/store.js';
@@ -61,7 +61,11 @@ export async function queueTrack(
     }
     const artist = result.artists[0] ?? 'Unknown';
     const label = isPlaying ? '⏭ Queued' : '▶ Playing';
-    await reply(message, `${label}: ${result.title} — ${artist}`);
+    if (isPlaying) {
+      await replyAndDelete(message, `${label}: ${result.title} — ${artist}`, 3000);
+    } else {
+      await reply(message, `${label}: ${result.title} — ${artist}`);
+    }
   } catch (err) {
     await reply(message, `Failed to queue track: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -115,7 +119,11 @@ export const playCommand: CommandHandler = async (message, args, ctx) => {
           appendToQueue({ title: local.title, artists: [local.artist], local: true });
         }
         const label = isPlaying ? '⏭ Queued' : '▶ Playing';
-        await reply(message, `${label}: ${local.title} — ${local.artist}`);
+        if (isPlaying) {
+          await replyAndDelete(message, `${label}: ${local.title} — ${local.artist}`, 3000);
+        } else {
+          await reply(message, `${label}: ${local.title} — ${local.artist}`);
+        }
       } catch (err) {
         await reply(message, `Failed to queue local track: ${err instanceof Error ? err.message : String(err)}`);
       }

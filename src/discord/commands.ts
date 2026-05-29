@@ -26,6 +26,11 @@ export async function reply(responder: Responder, content: string | Record<strin
   await responder.reply(content);
 }
 
+export async function replyAndDelete(responder: Responder, content: string | Record<string, unknown>, ms: number): Promise<void> {
+  const msg = await responder.channel?.send(content);
+  if (msg) setTimeout(() => (msg as any).delete().catch(() => {}), ms);
+}
+
 const commands = new Map<string, CommandHandler>();
 
 export function registerCommand(name: string, handler: CommandHandler): void {
