@@ -34,7 +34,8 @@ export const nowplayingCommand: CommandHandler = async (message, _args, ctx) => 
     ctx.player.getCurrentTrack(),
   ]);
   if (!track) {
-    await message.reply('Nothing is currently playing.');
+    const sent = await message.reply('Nothing is currently playing.');
+    setTimeout(() => (sent as any).delete().catch(() => {}), 5000);
     return;
   }
 
@@ -84,5 +85,6 @@ export const nowplayingCommand: CommandHandler = async (message, _args, ctx) => 
     } catch { /* no artwork available */ }
   }
 
-  await message.reply({ embeds: [embed], files });
+  const sent = await message.reply({ embeds: [embed], files });
+  setTimeout(() => (sent as any).delete().catch(() => {}), 5000);
 };
