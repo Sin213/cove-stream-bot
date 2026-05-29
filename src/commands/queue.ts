@@ -1,5 +1,5 @@
 import type { CommandHandler } from '../discord/commands.js';
-import { reply } from '../discord/commands.js';
+import { replyAndDelete } from '../discord/commands.js';
 import { getTrackMeta, pruneTrackMeta } from '../monochrome/trackMeta.js';
 import { getQueueEntries } from '../queue/store.js';
 
@@ -53,5 +53,5 @@ export const queueCommand: CommandHandler = async (message, args, ctx) => {
     lines.push('Queue is empty.');
   }
 
-  await reply(message, lines.join('\n'));
+  await replyAndDelete(message, lines.join('\n'), 5000);
 };
