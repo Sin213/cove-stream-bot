@@ -1,6 +1,8 @@
-import { mkdir, writeFile, readdir, stat, rm } from 'node:fs/promises';
+import { mkdir, writeFile, readdir, stat, rm, rename } from 'node:fs/promises';
 import { join } from 'node:path';
 import { CONFIG } from '../config.js';
+
+let tmpSeq = 0;
 
 // DeaDBeeF cannot reliably play remote audio over HTTP (it stalls on, and even
 // wedges its streamer with, non-faststart Tidal mp4 streams). It plays LOCAL
@@ -58,7 +60,12 @@ export async function cacheStream(url: string, key: string): Promise<string> {
   const path = join(CACHE_DIR, `${safe}.${ext}`);
   const buf = Buffer.from(await res.arrayBuffer());
   if (buf.length === 0) throw new Error('stream download was empty');
-  await writeFile(path, buf);
+  // Write to a unique temp file then atomically rename, so a concurrent reader
+  // never sees (and plays) a partially-written cache file. The temp name is
+  // dot-prefixed so the reuse scan (`${safe}.`) can't pick it up mid-write.
+  const tmp = join(CACHE_DIR, `.${safe}.${process.pid}.${tmpSeq++}.part`);
+  await writeFile(tmp, buf);
+  await rename(tmp, path);
   void pruneCache();
   return path;
 }

@@ -28,3 +28,8 @@ export function auditLog(guildId: string, userId: string, command: string, args:
     } catch { /* non-fatal */ }
   });
 }
+
+/** Awaits any pending audit writes; call before process exit so queued entries aren't lost. */
+export function flushAuditLog(): Promise<void> {
+  return writeChain;
+}

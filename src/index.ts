@@ -12,7 +12,7 @@ import { getGuildState, getAllGuildStates, GuildState } from './guild/state.js';
 import { getTrackMeta } from './monochrome/trackMeta.js';
 import { restoreQueue } from './queue/store.js';
 import { checkRateLimit } from './security/ratelimit.js';
-import { auditLog } from './security/audit.js';
+import { auditLog, flushAuditLog } from './security/audit.js';
 
 import { joinCommand } from './commands/join.js';
 import { leaveCommand } from './commands/leave.js';
@@ -356,7 +356,12 @@ async function main() {
     for (const gs of getAllGuildStates()) {
       gs.voiceManager.leave();
     }
-    void client.destroy().then(() => process.exit(0)).catch(() => process.exit(0));
+    // Flush pending audit writes before exiting so queued entries aren't lost.
+    void flushAuditLog()
+      .catch(() => {})
+      .then(() => client.destroy())
+      .then(() => process.exit(0))
+      .catch(() => process.exit(0));
   };
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
