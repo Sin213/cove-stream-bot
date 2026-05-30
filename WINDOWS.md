@@ -76,6 +76,18 @@ Logs should show the bot logged in and "Beefweb connection OK".
 | FFmpeg exits with `Error submitting a packet to the muxer: Invalid argument` | Fixed automatically via `-use_wallclock_as_timestamps 1` when format is `dshow`. Rebuild with `npm run build` if on old code |
 | FFmpeg exits with different error | Wrong device name or VB-Audio not installed. Re-run `ffmpeg -list_devices true -f dshow -i dummy` |
 
+## Online stream playback (`STREAM_DOWNLOAD`)
+
+For online tracks (`!search` / `!play <n>`), DeaDBeeF on Linux can't reliably stream
+the remote URL, so the bot downloads it to a local cache file first. foobar2000
+streams remote audio fine, so this is **off by default on Windows** (`STREAM_DOWNLOAD=auto`).
+
+- Leave it unset/`auto` — foobar2000 plays the URL directly. No extra setup.
+- If you ever set `STREAM_DOWNLOAD=on`, you **must** add `STREAM_CACHE_DIR`
+  (default `C:\Users\<you>\.cache\cove-stream-bot`) to foo_beefweb's allowed
+  **music directories** (foo_beefweb settings page), or `!play` will fail with
+  `item is not under allowed path`.
+
 ## Notes
 
 - VB-Audio Virtual Cable captures only foobar2000 output — no system audio bleed

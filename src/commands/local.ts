@@ -20,10 +20,19 @@ interface StoredLocal {
 }
 
 const TTL_MS = 5 * 60 * 1000;
+const SWEEP_THRESHOLD = 50;
 const store = new Map<string, StoredLocal>();
+
+function sweepExpired(): void {
+  const cutoff = Date.now() - TTL_MS;
+  for (const [id, entry] of store) {
+    if (entry.ts < cutoff) store.delete(id);
+  }
+}
 
 export function setLocalResults(userId: string, results: LocalResult[], message?: Deletable): void {
   store.set(userId, { results, ts: Date.now(), message });
+  if (store.size > SWEEP_THRESHOLD) sweepExpired();
 }
 
 export function clearLocalResults(userId: string): void {
@@ -60,23 +69,30 @@ export const localCommand: CommandHandler = async (message, args, ctx) => {
   const matches: LocalResult[] = [];
   const seenPaths = new Set<string>();
   const MAX_RESULTS = 10;
+  const PAGE = 200;
+  const words = query.split(/\s+/);
 
+  // Page through items and stop as soon as we have enough matches, instead of
+  // pulling every track of every playlist into memory up front.
+  outer:
   for (const pl of playlists) {
-    if (matches.length >= MAX_RESULTS) break;
-    const items = await ctx.player.getPlaylistItems(pl.id, 0, pl.itemCount);
-    for (let i = 0; i < items.length; i++) {
-      const cols = items[i].columns;
-      const artist = cols[0] || 'Unknown';
-      const title = cols[1] || 'Unknown';
-      const album = cols[2] || 'Unknown';
-      const path = cols[3] || '';
-      if (path.startsWith('http')) continue;
-      if (seenPaths.has(path)) continue;
-      const haystack = `${artist} ${title}`.toLowerCase();
-      if (query.split(/\s+/).every(word => haystack.includes(word))) {
-        seenPaths.add(path);
-        matches.push({ playlistId: pl.id, index: i, title, artist, album, path });
-        if (matches.length >= MAX_RESULTS) break;
+    for (let offset = 0; offset < pl.itemCount; offset += PAGE) {
+      const items = await ctx.player.getPlaylistItems(pl.id, offset, PAGE);
+      if (items.length === 0) break;
+      for (let i = 0; i < items.length; i++) {
+        const cols = items[i].columns;
+        const artist = cols[0] || 'Unknown';
+        const title = cols[1] || 'Unknown';
+        const album = cols[2] || 'Unknown';
+        const path = cols[3] || '';
+        if (path.startsWith('http')) continue;
+        if (seenPaths.has(path)) continue;
+        const haystack = `${artist} ${title}`.toLowerCase();
+        if (words.every(word => haystack.includes(word))) {
+          seenPaths.add(path);
+          matches.push({ playlistId: pl.id, index: offset + i, title, artist, album, path });
+          if (matches.length >= MAX_RESULTS) break outer;
+        }
       }
     }
   }

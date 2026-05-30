@@ -12,23 +12,29 @@ export interface CommandContext {
   guildState: GuildState;
 }
 
+/** A sent message that can later be deleted (Discord Message or interaction reply). */
+export interface Deletable { delete(): Promise<unknown> }
+
 export interface Responder {
   userId: string;
   guildId: string | null;
   channel: { id: string; send(content: unknown): Promise<unknown> } | null;
   member: { voice: { channel: { id: string; name: string; guild: unknown } | null } } | null;
-  reply(content: string | Record<string, unknown>): Promise<void>;
+  // Returns the sent message so callers can act on it (e.g. auto-delete). May be
+  // undefined if the channel can't be replied to.
+  reply(content: string | Record<string, unknown>): Promise<Deletable | undefined>;
 }
 
 export type CommandHandler = (responder: Responder, args: string[], ctx: CommandContext) => Promise<void>;
 
-export async function reply(responder: Responder, content: string | Record<string, unknown>): Promise<void> {
-  await responder.reply(content);
+export async function reply(responder: Responder, content: string | Record<string, unknown>): Promise<Deletable | undefined> {
+  return responder.reply(content);
 }
 
+/** Replies, then deletes the reply after `ms`. Works for both prefix and slash. */
 export async function replyAndDelete(responder: Responder, content: string | Record<string, unknown>, ms: number): Promise<void> {
-  const msg = await responder.channel?.send(content);
-  if (msg) setTimeout(() => (msg as any).delete().catch(() => {}), ms);
+  const msg = await responder.reply(content);
+  if (msg) setTimeout(() => msg.delete().catch(() => {}), ms);
 }
 
 const commands = new Map<string, CommandHandler>();

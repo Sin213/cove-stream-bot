@@ -12,8 +12,10 @@ export function startWebServer(player: PlayerBackend, relay: RelayManager, port:
 
   app.get('/api/state', async (_req, res) => {
     try {
-      const state = await player.getPlayerState();
-      const track = await player.getCurrentTrack();
+      const [state, track] = await Promise.all([
+        player.getPlayerState(),
+        player.getCurrentTrack(),
+      ]);
       res.json({
         relayRunning: relay.isRunning(),
         backend: player.name,

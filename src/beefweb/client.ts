@@ -1,6 +1,7 @@
 import type { PlayerBackend, PlayerState, TrackInfo, Playlist, PlaylistItem } from '../player/types.js';
 
 const COLUMNS = ['%artist%', '%title%', '%album%', '%path%'];
+const COLUMNS_ENC = COLUMNS.map(encodeURIComponent).join(',');
 const PLAYLIST_ID_TTL = 30_000;
 const REQUEST_TIMEOUT_MS = 8_000;
 
@@ -31,8 +32,7 @@ export class BeefwebClient implements PlayerBackend {
 
   async getPlayerState(): Promise<PlayerState> {
     if (this._inflightState) return this._inflightState;
-    const cols = COLUMNS.map(encodeURIComponent).join(',');
-    this._inflightState = this.request(`/api/player?columns=${cols}`)
+    this._inflightState = this.request(`/api/player?columns=${COLUMNS_ENC}`)
       .then(data => (data as { player: PlayerState }).player)
       .finally(() => { this._inflightState = null; });
     return this._inflightState;
@@ -96,9 +96,8 @@ export class BeefwebClient implements PlayerBackend {
   }
 
   async getPlaylistItems(playlistId: string, offset = 0, count = 100): Promise<PlaylistItem[]> {
-    const cols = COLUMNS.map(encodeURIComponent).join(',');
     const data = await this.request(
-      `/api/playlists/${playlistId}/items/${offset}:${offset + count}?columns=${cols}`
+      `/api/playlists/${playlistId}/items/${offset}:${offset + count}?columns=${COLUMNS_ENC}`
     ) as { playlistItems: { items: PlaylistItem[] } };
     return data.playlistItems.items;
   }

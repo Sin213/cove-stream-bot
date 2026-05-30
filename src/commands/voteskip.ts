@@ -1,6 +1,9 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { EmbedBuilder } from 'discord.js';
 import { getTrackMeta } from '../monochrome/trackMeta.js';
+import { looksLikeUrl } from '../util/text.js';
+
+const VOTE_SKIP_TTL_MS = 5 * 60_000;
 
 export const voteskipCommand: CommandHandler = async (responder, _args, ctx) => {
   const track = await ctx.player.getCurrentTrack();
@@ -10,10 +13,6 @@ export const voteskipCommand: CommandHandler = async (responder, _args, ctx) => 
   }
 
   const stored = getTrackMeta(track.trackIndex, track.path);
-
-  function looksLikeUrl(s: string): boolean {
-    return s.startsWith('http') || s.includes('://') || (s.includes('?') && s.includes('='));
-  }
 
   const rawTitle = track.title !== 'Unknown' && !looksLikeUrl(track.title) ? track.title : null;
   const rawArtist = track.artist !== 'Unknown' && !looksLikeUrl(track.artist) ? track.artist : null;
@@ -35,6 +34,13 @@ export const voteskipCommand: CommandHandler = async (responder, _args, ctx) => 
   }
 
   const msg = await (ch as any).send({ embeds: [embed] }) as { id: string; react(e: string): Promise<unknown> };
-  ctx.guildState.voteSkipMessageId = msg.id;
+  const { guildState } = ctx;
+  guildState.voteSkipMessageId = msg.id;
   await msg.react('⏭');
+
+  // Expire the vote if it's never resolved, so a stale message ID can't linger
+  // until the next track change.
+  setTimeout(() => {
+    if (guildState.voteSkipMessageId === msg.id) guildState.voteSkipMessageId = null;
+  }, VOTE_SKIP_TTL_MS);
 };

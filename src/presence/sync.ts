@@ -5,6 +5,7 @@ import type { TrackMeta } from '../monochrome/trackMeta.js';
 import { CONFIG } from '../config.js';
 import { pushHistory } from '../history/store.js';
 import { advanceQueue } from '../queue/store.js';
+import { looksLikeUrl } from '../util/text.js';
 
 type TrackChangeCallback = (title: string, artist: string, meta?: TrackMeta) => void | Promise<void>;
 
@@ -33,13 +34,9 @@ export function startPresenceSync(
         return;
       }
 
-      function isUrl(s: string): boolean {
-        return s.startsWith('http') || s.includes('://') || (s.includes('?') && s.includes('='));
-      }
-
       const stored = getTrackMeta(track.trackIndex, track.path);
-      const rawArtist = track.artist !== 'Unknown' && !isUrl(track.artist) ? track.artist : '';
-      const rawTitle = track.title !== 'Unknown' && !isUrl(track.title) ? track.title : '';
+      const rawArtist = track.artist !== 'Unknown' && !looksLikeUrl(track.artist) ? track.artist : '';
+      const rawTitle = track.title !== 'Unknown' && !looksLikeUrl(track.title) ? track.title : '';
       const artist = stored?.artists[0] || rawArtist;
       const title = stored?.title || rawTitle;
 

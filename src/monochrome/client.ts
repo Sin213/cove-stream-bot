@@ -1,9 +1,11 @@
-import type { TrackMatch, StreamInfo } from './types.js';
+import type { TrackMatch } from './types.js';
 import { readFileSync, renameSync, writeFileSync } from 'fs';
 import { resolve } from 'path';
 
 const STATS_PATH = resolve(process.cwd(), 'mirror-stats.json');
 const STATS_DEBOUNCE_MS = 1_000;
+const SEARCH_CACHE_TTL_MS = 60_000;
+const SEARCH_CACHE_MAX = 100;
 
 interface MirrorFailure {
   mirror: string;
@@ -94,6 +96,7 @@ export class MonochromeClient {
   private qobuzBaseURLs: string[];
   private mirrorStats = new Map<string, { ok: number; total: number }>();
   private statsPersistTimer: ReturnType<typeof setTimeout> | null = null;
+  private searchCache = new Map<string, { results: TrackMatch[]; expiry: number }>();
   private _enabled = true;
 
   get enabled(): boolean { return this._enabled; }
@@ -145,6 +148,10 @@ export class MonochromeClient {
   }
 
   async search(query: string, limit: number): Promise<TrackMatch[]> {
+    const cacheKey = `${limit}:${query}`;
+    const cached = this.searchCache.get(cacheKey);
+    if (cached && Date.now() < cached.expiry) return cached.results;
+
     const path = `/search/?s=${encodeURIComponent(query)}&limit=${limit}&offset=0`;
     const data = await this.requestWithFailover(path) as {
       data?: { items?: unknown[] };
@@ -153,7 +160,7 @@ export class MonochromeClient {
     const items = data?.data?.items;
     if (!Array.isArray(items)) return [];
 
-    return items.map((item: any) => {
+    const results = items.map((item: any) => {
       let albumArtUrl: string | undefined;
       const cover = item.album?.cover ?? item.cover;
       if (typeof cover === 'string' && cover.length > 0) {
@@ -172,27 +179,56 @@ export class MonochromeClient {
         albumArtUrl,
       };
     });
+
+    this.searchCache.set(cacheKey, { results, expiry: Date.now() + SEARCH_CACHE_TTL_MS });
+    if (this.searchCache.size > SEARCH_CACHE_MAX) {
+      const oldest = this.searchCache.keys().next().value;
+      if (oldest !== undefined) this.searchCache.delete(oldest);
+    }
+    return results;
   }
 
   async getStreamUrl(tidalId: number, quality?: string, isrc?: string): Promise<string> {
     const q = quality ?? this.quality;
 
-    // Prefer Qobuz — returns direct FLAC/MP3 URLs that DeaDBeeF can stream natively
-    if (isrc && this.qobuzBaseURLs.length > 0) {
-      const qobuzUrl = await this.tryQobuzFallback(isrc, q);
-      if (qobuzUrl) return qobuzUrl;
+    // Primary: Tidal /track via the configured mirrors. Treat "200 but no
+    // playable URL" as a failure so we fail over across mirrors.
+    const path = `/track/?id=${tidalId}&quality=${q}`;
+    let tidalError: unknown;
+    try {
+      const data = await this.requestWithFailover(
+        path,
+        d => this.extractStreamUrl(d as Record<string, unknown>) !== null,
+      ) as Record<string, unknown>;
+      const url = this.extractStreamUrl(data);
+      if (url) return url;
+      // validate() should guarantee a URL; defensive only.
+      const reason = this.classifyMissingUrl(data);
+      this.logStreamShapeDiag(tidalId, data, path, reason);
+      const e = new Error(`No playable URL in track response for ${tidalId}`);
+      (e as any).reason = reason;
+      tidalError = e;
+    } catch (err) {
+      // Prefer a specific stream reason (PREVIEW_ONLY, etc.) over the generic
+      // summary, but keep CREDENTIAL_EXPIRED which summarizeFailures prioritizes.
+      const failures = (err as any)?.mirrorFailures as MirrorFailure[] | undefined;
+      if (failures && (err as any).reason !== 'CREDENTIAL_EXPIRED') {
+        const specific = failures.map(f => f.streamError).find(s => s && s !== 'CREDENTIAL_EXPIRED');
+        if (specific) (err as any).reason = specific;
+      }
+      tidalError = err;
     }
 
-    const path = `/track/?id=${tidalId}&quality=${q}`;
-    const data = await this.requestWithFailover(path) as Record<string, unknown>;
-    const url = this.extractStreamUrl(data);
-    if (url) return url;
+    // Fallback: Qobuz (direct FLAC/MP3) matched by ISRC, only if Tidal had nothing.
+    if (isrc && this.qobuzBaseURLs.length > 0) {
+      const qobuzUrl = await this.tryQobuzFallback(isrc, q);
+      if (qobuzUrl) {
+        console.log('[monochrome] Tidal had no stream — used Qobuz fallback');
+        return qobuzUrl;
+      }
+    }
 
-    const reason = this.classifyMissingUrl(data);
-    this.logStreamShapeDiag(tidalId, data, path, reason);
-    const err = new Error(`No playable URL in track response for ${tidalId}`);
-    (err as any).reason = reason;
-    throw err;
+    throw tidalError ?? new Error(`No playable URL for ${tidalId}`);
   }
 
   private qualityToQobuzFormat(quality: string): string {
@@ -203,36 +239,47 @@ export class MonochromeClient {
     }
   }
 
-  private async tryQobuzFallback(isrc: string, quality: string): Promise<string | null> {
-    const qobuzQuality = this.qualityToQobuzFormat(quality);
-    for (const base of this.qobuzBaseURLs) {
-      try {
-        const searchRes = await fetch(
-          `${base}/api/get-music?q=${encodeURIComponent(isrc)}&offset=0`,
-          { signal: AbortSignal.timeout(8000) },
-        );
-        if (!searchRes.ok) continue;
-        const searchJson = await searchRes.json() as Record<string, any>;
-        const tracks: any[] = searchJson?.data?.tracks?.items ?? [];
-        const match = tracks.find(t => t.isrc?.toLowerCase() === isrc.toLowerCase()) ?? tracks[0];
-        if (!match?.id) continue;
+  // Resolve one Qobuz mirror (search by ISRC, then fetch the stream URL).
+  // Throws on any failure so callers can race mirrors with Promise.any.
+  private async tryQobuzBase(base: string, isrc: string, qobuzQuality: string): Promise<string> {
+    const searchRes = await fetch(
+      `${base}/api/get-music?q=${encodeURIComponent(isrc)}&offset=0`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!searchRes.ok) throw new Error(`search HTTP ${searchRes.status}`);
+    const searchJson = await searchRes.json() as Record<string, any>;
+    const tracks: any[] = searchJson?.data?.tracks?.items ?? [];
+    const match = tracks.find(t => t.isrc?.toLowerCase() === isrc.toLowerCase()) ?? tracks[0];
+    if (!match?.id) throw new Error('no track match');
 
-        const streamRes = await fetch(
-          `${base}/api/download-music?track_id=${match.id}&quality=${qobuzQuality}`,
-          { signal: AbortSignal.timeout(8000) },
-        );
-        if (!streamRes.ok) continue;
-        const streamJson = await streamRes.json() as Record<string, any>;
-        const url = streamJson?.data?.url;
-        if (typeof url === 'string' && url.startsWith('http')) {
-          console.log(`[qobuz] stream resolved via ${redactUrl(base)}`);
-          return url;
-        }
-      } catch (err) {
-        console.warn(`[qobuz] ${redactUrl(base)} failed for ISRC ${isrc}:`, err instanceof Error ? err.message : err);
-      }
+    const streamRes = await fetch(
+      `${base}/api/download-music?track_id=${match.id}&quality=${qobuzQuality}`,
+      { signal: AbortSignal.timeout(8000) },
+    );
+    if (!streamRes.ok) throw new Error(`download HTTP ${streamRes.status}`);
+    const streamJson = await streamRes.json() as Record<string, any>;
+    const url = streamJson?.data?.url;
+    if (typeof url !== 'string' || !url.startsWith('http')) throw new Error('no playable URL');
+    console.log(`[qobuz] stream resolved via ${redactUrl(base)}`);
+    return url;
+  }
+
+  // Probe all Qobuz mirrors in parallel; first success wins. Returns null if all fail.
+  private async tryQobuzFallback(isrc: string, quality: string): Promise<string | null> {
+    if (this.qobuzBaseURLs.length === 0) return null;
+    const qobuzQuality = this.qualityToQobuzFormat(quality);
+    try {
+      return await Promise.any(
+        this.qobuzBaseURLs.map(base =>
+          this.tryQobuzBase(base, isrc, qobuzQuality).catch(err => {
+            console.warn(`[qobuz] ${redactUrl(base)} failed for ISRC ${isrc}:`, err instanceof Error ? err.message : err);
+            throw err;
+          }),
+        ),
+      );
+    } catch {
+      return null;
     }
-    return null;
   }
 
   private logStreamShapeDiag(
@@ -311,7 +358,7 @@ export class MonochromeClient {
     return null;
   }
 
-  private async requestWithFailover(path: string): Promise<unknown> {
+  private async requestWithFailover(path: string, validate?: (data: unknown) => boolean): Promise<unknown> {
     const sorted = [...this.baseURLs].sort(
       (a, b) => this.mirrorSuccessRate(b) - this.mirrorSuccessRate(a),
     );
@@ -349,6 +396,13 @@ export class MonochromeClient {
       } catch {
         this.recordMirrorResult(base, false);
         throw { mirror, category: 'parse', detail: `invalid JSON: ${safeBodySnippet(text)}` } as MirrorFailure;
+      }
+      // A 200 with no usable payload (e.g. a track response with no playable URL)
+      // counts as a mirror failure so Promise.any keeps trying other mirrors.
+      if (validate && !validate(data)) {
+        this.recordMirrorResult(base, false);
+        const reason = this.classifyMissingUrl(data as Record<string, unknown>);
+        throw { mirror, category: 'http', status: res.status, detail: `no playable URL (${reason})`, streamError: reason } as MirrorFailure;
       }
       this.recordMirrorResult(base, true);
       return data;

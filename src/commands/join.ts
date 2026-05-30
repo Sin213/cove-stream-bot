@@ -10,7 +10,7 @@ export const joinCommand: CommandHandler = async (message, _args, ctx) => {
       await reply(message, 'You must be in a voice channel.');
       return;
     }
-    await ctx.voiceManager.join(member.voice.channel);
+    await ctx.voiceManager.join(member.voice.channel, () => ctx.relayManager.stop());
   }
 
   if (!ctx.voiceManager.player) {

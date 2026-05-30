@@ -9,10 +9,20 @@ interface StoredSearch {
 }
 
 const TTL_MS = 5 * 60 * 1000;
+const SWEEP_THRESHOLD = 50;
 const store = new Map<string, StoredSearch>();
+
+function sweepExpired(): void {
+  const cutoff = Date.now() - TTL_MS;
+  for (const [id, entry] of store) {
+    if (entry.ts < cutoff) store.delete(id);
+  }
+}
 
 export function setSearchResults(userId: string, results: TrackMatch[], message?: Deletable): void {
   store.set(userId, { results, ts: Date.now(), message });
+  // Drop stale entries from inactive users so the store can't grow unbounded.
+  if (store.size > SWEEP_THRESHOLD) sweepExpired();
 }
 
 export function clearSearchResults(userId: string): void {

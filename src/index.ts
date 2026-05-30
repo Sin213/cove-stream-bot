@@ -1,4 +1,4 @@
-import { Events, EmbedBuilder } from 'discord.js';
+import { Events, EmbedBuilder, AttachmentBuilder } from 'discord.js';
 import type { ChatInputCommandInteraction } from 'discord.js';
 import { CONFIG } from './config.js';
 import { createDiscordClient } from './discord/client.js';
@@ -8,7 +8,8 @@ import { registerSlashCommands } from './discord/slashCommands.js';
 import { createPlayerBackend } from './player/factory.js';
 import { startPresenceSync } from './presence/sync.js';
 import { MonochromeClient } from './monochrome/client.js';
-import { getGuildState, getAllGuildStates } from './guild/state.js';
+import { getGuildState, getAllGuildStates, GuildState } from './guild/state.js';
+import { getTrackMeta } from './monochrome/trackMeta.js';
 import { restoreQueue } from './queue/store.js';
 import { checkRateLimit } from './security/ratelimit.js';
 import { auditLog } from './security/audit.js';
@@ -20,7 +21,7 @@ import { pauseCommand } from './commands/pause.js';
 import { nextCommand } from './commands/next.js';
 import { prevCommand } from './commands/prev.js';
 import { stopCommand } from './commands/stop.js';
-import { nowplayingCommand } from './commands/nowplaying.js';
+import { nowplayingCommand, buildTrackEmbed } from './commands/nowplaying.js';
 import { statusCommand } from './commands/status.js';
 import { searchCommand } from './commands/search.js';
 import { queueCommand } from './commands/queue.js';
@@ -80,8 +81,32 @@ const PROTECTED_COMMANDS = new Set([
   'clearqueue', 'cq', 'whitelist', 'wl', 'blacklist', 'bl', 'shuffle', 'restart', 'autosearch', 'as',
 ]);
 
-// messageId -> timestamp; evict entries older than 5 minutes
-const handledMessageIds = new Map<string, number>();
+// Bounded set of recently-handled message IDs to guard against double-dispatch.
+// Insertion-ordered, so evicting the oldest entry is O(1) on the hot path.
+const handledMessageIds = new Set<string>();
+const MAX_HANDLED_IDS = 1000;
+
+type AuthDecision =
+  | { ok: true }
+  | { ok: false; kind: 'blacklisted' }
+  | { ok: false; kind: 'unauthorized' | 'ratelimited'; message: string };
+
+// Shared gating for prefix and slash commands: blacklist → protected → rate limit.
+// Callers decide how to surface a denial (prefix is silent on blacklist; slash
+// always replies ephemerally). checkRateLimit records usage, so call exactly once.
+function authorize(commandName: string, guildState: GuildState, userId: string): AuthDecision {
+  if (guildState.blacklistedUserIds.has(userId)) return { ok: false, kind: 'blacklisted' };
+  if (
+    PROTECTED_COMMANDS.has(commandName) &&
+    guildState.approvedUserIds.size > 0 &&
+    !guildState.approvedUserIds.has(userId)
+  ) {
+    return { ok: false, kind: 'unauthorized', message: 'You are not authorized to use this command.' };
+  }
+  const rl = checkRateLimit(guildState.guildId, userId, commandName);
+  if (!rl.allowed) return { ok: false, kind: 'ratelimited', message: rl.reason! };
+  return { ok: true };
+}
 
 function slashArgs(interaction: ChatInputCommandInteraction): string[] {
   switch (interaction.commandName) {
@@ -134,14 +159,11 @@ async function main() {
   client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
     if (!message.content.startsWith(PREFIX)) return;
-    const now = Date.now();
     if (handledMessageIds.has(message.id)) return;
-    handledMessageIds.set(message.id, now);
-    if (handledMessageIds.size > 500) {
-      const cutoff = now - 300_000;
-      for (const [id, ts] of handledMessageIds) {
-        if (ts < cutoff) handledMessageIds.delete(id);
-      }
+    handledMessageIds.add(message.id);
+    if (handledMessageIds.size > MAX_HANDLED_IDS) {
+      const oldest = handledMessageIds.values().next().value;
+      if (oldest !== undefined) handledMessageIds.delete(oldest);
     }
 
     const args = message.content.slice(PREFIX.length).trim().split(/\s+/);
@@ -153,22 +175,12 @@ async function main() {
     const guildId = message.guildId ?? '';
     const guildState = getGuildState(guildId);
 
-    if (guildState.blacklistedUserIds.has(message.author.id)) return;
-
-    if (
-      PROTECTED_COMMANDS.has(commandName) &&
-      guildState.approvedUserIds.size > 0 &&
-      !guildState.approvedUserIds.has(message.author.id)
-    ) {
-      try {
-        await message.reply('You are not authorized to use this command.');
-      } catch { /* channel gone */ }
-      return;
-    }
-
-    const rl = checkRateLimit(guildId, message.author.id, commandName);
-    if (!rl.allowed) {
-      try { await message.reply(rl.reason!); } catch { /* channel gone */ }
+    const decision = authorize(commandName, guildState, message.author.id);
+    if (!decision.ok) {
+      // Prefix path stays silent for blacklisted users (no reply).
+      if (decision.kind !== 'blacklisted') {
+        try { await message.reply(decision.message); } catch { /* channel gone */ }
+      }
       return;
     }
 
@@ -180,7 +192,8 @@ async function main() {
       channel: message.channel as Responder['channel'],
       member: message.member as Responder['member'],
       reply: async (content) => {
-        if ('send' in message.channel) await (message.channel as any).send(content);
+        if ('send' in message.channel) return await (message.channel as any).send(content);
+        return undefined;
       },
     };
 
@@ -212,27 +225,17 @@ async function main() {
     const guildId = interaction.guildId ?? '';
     const guildState = getGuildState(guildId);
 
-    if (guildState.blacklistedUserIds.has(interaction.user.id)) {
-      await interaction.reply({ content: 'You are not authorized to use this command.', ephemeral: true });
+    const decision = authorize(interaction.commandName, guildState, interaction.user.id);
+    if (!decision.ok) {
+      const content = decision.kind === 'blacklisted'
+        ? 'You are not authorized to use this command.'
+        : decision.message;
+      await interaction.reply({ content, ephemeral: true });
       return;
     }
 
-    if (
-      PROTECTED_COMMANDS.has(interaction.commandName) &&
-      guildState.approvedUserIds.size > 0 &&
-      !guildState.approvedUserIds.has(interaction.user.id)
-    ) {
-      await interaction.reply({ content: 'You are not authorized to use this command.', ephemeral: true });
-      return;
-    }
-
-    const rl = checkRateLimit(guildId, interaction.user.id, interaction.commandName);
-    if (!rl.allowed) {
-      await interaction.reply({ content: rl.reason!, ephemeral: true });
-      return;
-    }
-
-    auditLog(guildId, interaction.user.id, interaction.commandName, slashArgs(interaction));
+    const sArgs = slashArgs(interaction);
+    auditLog(guildId, interaction.user.id, interaction.commandName, sArgs);
 
     const ephemeral = interaction.commandName === 'search';
     await interaction.deferReply({ ephemeral });
@@ -242,7 +245,7 @@ async function main() {
       guildId: interaction.guildId,
       channel: interaction.channel as Responder['channel'],
       member: interaction.member as Responder['member'],
-      reply: async (content) => { await interaction.editReply(content as any); },
+      reply: async (content) => await interaction.editReply(content as any),
     };
 
     const ctx = {
@@ -254,7 +257,7 @@ async function main() {
     };
 
     try {
-      await handler(responder, slashArgs(interaction), ctx);
+      await handler(responder, sArgs, ctx);
     } catch (err) {
       console.error(`Slash command error (${interaction.commandName}):`, err);
       try {
@@ -269,27 +272,33 @@ async function main() {
   const appId = client.application?.id ?? client.user!.id;
   registerSlashCommands(CONFIG.DISCORD_TOKEN, appId, CONFIG.GUILD_ID).catch(console.error);
 
-  startPresenceSync(client, player, async (title, artist, meta) => {
-    // Reset all guild vote-skip message IDs on track change
-    for (const gs of getAllGuildStates()) {
-      gs.voteSkipMessageId = null;
-    }
-
-    // Build embed for autonp (only when we have a displayable title)
+  const presenceTimer = startPresenceSync(client, player, async (title, artist, meta) => {
+    // Build the rich now-playing card for the autonp announcement — same format
+    // as the !np command (progress/state/backend/source/art) — for local + online.
     let embed: EmbedBuilder | null = null;
+    let artFiles: AttachmentBuilder[] = [];
     if (title) {
-      embed = new EmbedBuilder().setTitle(title).setColor(0x1db954).setFooter({ text: '▶ Now Playing' });
-      if (artist) embed.setDescription(artist);
-      if (meta?.albumArtUrl) embed.setThumbnail(meta.albumArtUrl);
+      try {
+        const [state, track] = await Promise.all([player.getPlayerState(), player.getCurrentTrack()]);
+        if (track) {
+          const stored = getTrackMeta(track.trackIndex, track.path) ?? meta ?? undefined;
+          const built = await buildTrackEmbed(state, track, stored, player.name, '▶ Now Playing');
+          embed = built.embed;
+          artFiles = built.files;
+        }
+      } catch { /* backend hiccup — skip this announcement */ }
     }
 
     for (const gs of getAllGuildStates()) {
+      // Reset vote-skip on track change, then (re)announce for this guild.
+      gs.voteSkipMessageId = null;
+
       // Autonp announcement
       if (gs.announceChannelId && embed) {
         try {
           const ch = client.channels.cache.get(gs.announceChannelId);
           if (ch && 'send' in ch && typeof (ch as any).send === 'function') {
-            const msg = await (ch as any).send({ embeds: [embed] }) as { id: string; react(e: string): Promise<unknown> };
+            const msg = await (ch as any).send({ embeds: [embed], files: artFiles }) as { id: string; react(e: string): Promise<unknown> };
             gs.voteSkipMessageId = msg.id;
             await msg.react('⏭');
           }
@@ -309,6 +318,10 @@ async function main() {
   // Vote-skip: majority of VC members reacting ⏭ on the autonp message skips the track
   client.on(Events.MessageReactionAdd, async (reaction, user) => {
     if (user.bot) return;
+    // Partials may arrive for uncached messages — hydrate before reading fields.
+    if (reaction.partial) {
+      try { await reaction.fetch(); } catch { return; }
+    }
     if (reaction.emoji.name !== '⏭') return;
 
     // Find which guild owns this vote-skip message
@@ -339,6 +352,7 @@ async function main() {
   console.log('Bot is running');
 
   const shutdown = () => {
+    clearInterval(presenceTimer);
     for (const gs of getAllGuildStates()) {
       gs.voiceManager.leave();
     }
@@ -347,5 +361,14 @@ async function main() {
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
 }
+
+// Keep the bot alive on stray async errors (e.g. a transient Discord/network
+// rejection) instead of crashing the whole process.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
+});
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught exception:', err);
+});
 
 main().catch(console.error);

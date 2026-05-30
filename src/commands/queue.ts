@@ -2,19 +2,10 @@ import type { CommandHandler } from '../discord/commands.js';
 import { replyAndDelete } from '../discord/commands.js';
 import { getTrackMeta, pruneTrackMeta } from '../monochrome/trackMeta.js';
 import { getQueueEntries } from '../queue/store.js';
-
-function fmt(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
-
-function isUrl(s: string): boolean {
-  return s.startsWith('http') || s.includes('://') || (s.includes('?') && s.includes('='));
-}
+import { looksLikeUrl, formatDuration as fmt } from '../util/text.js';
 
 function cleanLabel(raw: string, fallback: string): string {
-  return raw && raw !== 'Unknown' && !isUrl(raw) ? raw : fallback;
+  return raw && raw !== 'Unknown' && !looksLikeUrl(raw) ? raw : fallback;
 }
 
 export const queueCommand: CommandHandler = async (message, args, ctx) => {

@@ -3,12 +3,7 @@ import { reply } from '../discord/commands.js';
 import { CONFIG } from '../config.js';
 import { setSearchResults } from '../monochrome/selection.js';
 import { clearLocalResults } from './local.js';
-
-function formatDuration(sec: number): string {
-  const m = Math.floor(sec / 60);
-  const s = Math.floor(sec % 60);
-  return `${m}:${s.toString().padStart(2, '0')}`;
-}
+import { formatDuration } from '../util/text.js';
 
 export const searchCommand: CommandHandler = async (message, args, ctx) => {
   if (!ctx.monochrome.enabled) {

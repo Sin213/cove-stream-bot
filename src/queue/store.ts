@@ -3,6 +3,8 @@ import { resolve } from 'path';
 import type { MonochromeClient } from '../monochrome/client.js';
 import type { PlayerBackend } from '../player/types.js';
 import { setTrackMeta } from '../monochrome/trackMeta.js';
+import { cacheStream } from '../resolve/cache.js';
+import { CONFIG } from '../config.js';
 
 export interface QueueEntry {
   tidalId?: number;
@@ -15,6 +17,7 @@ export interface QueueEntry {
 const PERSIST_PATH = resolve(process.cwd(), 'queue.json');
 const DEBOUNCE_MS = 500;
 const RESTORE_CONCURRENCY = 3;
+const MAX_QUEUE = 500; // safety bound; the queue self-drains as tracks play
 let _queue: QueueEntry[] = [];
 let _persistTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -67,6 +70,7 @@ process.on('exit', () => {
 
 export function appendToQueue(entry: QueueEntry): void {
   _queue.push(entry);
+  if (_queue.length > MAX_QUEUE) _queue.shift();
   persist();
 }
 
@@ -105,20 +109,34 @@ export async function restoreQueue(player: PlayerBackend, monochrome: Monochrome
       entry => monochrome.getStreamUrl(entry.tidalId!, undefined, entry.isrc)
         .then(url => ({ entry, url }))
     );
-    let index = 0;
-    for (const result of resolved) {
+    let added = 0;
+    for (let i = 0; i < resolved.length; i++) {
+      const result = resolved[i];
       if (result.status === 'rejected') {
-        const entry = _queue[index];
+        const entry = restorable[i];
         console.warn(`[queue] Failed to restore "${entry?.title}":`, result.reason instanceof Error ? result.reason.message : result.reason);
       } else {
         const { entry, url } = result.value;
-        await player.addItems(playlist.id, [url]);
-        setTrackMeta(index, url, { title: entry.title, artists: entry.artists, isrc: entry.isrc });
+        // Download to a local cache file when enabled — DeaDBeeF can't reliably
+        // stream URLs (skipped when STREAM_DOWNLOAD is off, e.g. foobar2000).
+        let playPath = url;
+        if (CONFIG.STREAM_DOWNLOAD) {
+          try {
+            playPath = await cacheStream(url, `t${entry.tidalId}`);
+          } catch (err) {
+            console.warn(`[queue] Failed to cache "${entry.title}":`, err instanceof Error ? err.message : err);
+            continue;
+          }
+        }
+        await player.addItems(playlist.id, [playPath]);
+        // Tracks append to the empty playlist in order, so the real track index
+        // is the count of successfully-added items — not the resolved-array
+        // position `i` (which also counts the entries that failed to resolve).
+        setTrackMeta(added, playPath, { title: entry.title, artists: entry.artists, isrc: entry.isrc });
+        added++;
       }
-      index++;
     }
-    const ok = resolved.filter(r => r.status === 'fulfilled').length;
-    console.log(`[queue] Restored ${ok}/${_queue.length} track(s).`);
+    console.log(`[queue] Restored ${added}/${restorable.length} track(s).`);
   } catch (err) {
     console.warn('[queue] Restore failed:', err instanceof Error ? err.message : err);
   }

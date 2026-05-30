@@ -15,6 +15,7 @@ const COOLDOWNS: Record<string, number> = {
   vol: 2000,
 };
 
+const COOLDOWN_TTL = Math.max(...Object.values(COOLDOWNS), WINDOW_MS);
 const globalWindows = new Map<string, UserWindow>();
 const lastUsed = new Map<string, number>();
 let lastCleanup = 0;
@@ -27,9 +28,8 @@ function cleanup(now: number): void {
     if (now - win.windowStart > WINDOW_MS) globalWindows.delete(key);
   }
 
-  const cooldownTtl = Math.max(...Object.values(COOLDOWNS), WINDOW_MS);
   for (const [key, ts] of lastUsed) {
-    if (now - ts > cooldownTtl) lastUsed.delete(key);
+    if (now - ts > COOLDOWN_TTL) lastUsed.delete(key);
   }
 }
 

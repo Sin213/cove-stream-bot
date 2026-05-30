@@ -2,8 +2,10 @@ import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
 
 export const statusCommand: CommandHandler = async (message, _args, ctx) => {
-  const state = await ctx.player.getPlayerState();
-  const track = await ctx.player.getCurrentTrack();
+  const [state, track] = await Promise.all([
+    ctx.player.getPlayerState(),
+    ctx.player.getCurrentTrack(),
+  ]);
   const relayRunning = ctx.relayManager.isRunning();
   const connected = ctx.voiceManager.isConnected();
 

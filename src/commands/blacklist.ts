@@ -1,11 +1,7 @@
 import type { CommandHandler } from '../discord/commands.js';
 import { reply } from '../discord/commands.js';
 import { saveGuildState } from '../security/persist.js';
-
-function parseUserId(mention: string): string | null {
-  const match = mention.match(/^<@!?(\d+)>$/) ?? mention.match(/^(\d+)$/);
-  return match?.[1] ?? null;
-}
+import { parseUserId } from '../util/text.js';
 
 export const blacklistCommand: CommandHandler = async (message, args, ctx) => {
   const sub = args[0]?.toLowerCase();

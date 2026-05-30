@@ -4,8 +4,36 @@ import { getSearchResult, consumeSearchMessage } from '../monochrome/selection.j
 import { setTrackMeta } from '../monochrome/trackMeta.js';
 import { appendToQueue, getQueueEntries } from '../queue/store.js';
 import { isStreamingLink, resolveStreamingLink } from '../resolve/links.js';
+import { cacheStream } from '../resolve/cache.js';
+import { CONFIG } from '../config.js';
 import type { TrackMatch } from '../monochrome/types.js';
+import type { Playlist } from '../player/types.js';
 import { getLocalResult, consumeLocalMessage } from './local.js';
+
+type Responder = Parameters<CommandHandler>[0];
+type Ctx = Parameters<CommandHandler>[2];
+
+// Where a newly-added track should land: appended after the queued tail while
+// playing, or at the end of the playlist when stopped.
+async function computePlacement(ctx: Ctx): Promise<{ playlist: Playlist; isPlaying: boolean; insertIndex: number }> {
+  const [playlists, state] = await Promise.all([
+    ctx.player.getPlaylists(),
+    ctx.player.getPlayerState(),
+  ]);
+  const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
+  if (!playlist) throw new Error('No playlists exist in the player');
+  const isPlaying = state.playbackState === 'playing';
+  const currentIndex = state.activeItem?.index ?? -1;
+  const insertIndex = isPlaying ? currentIndex + 1 + getQueueEntries().length : playlist.itemCount;
+  return { playlist, isPlaying, insertIndex };
+}
+
+async function announcePlacement(message: Responder, isPlaying: boolean, title: string, artist: string): Promise<void> {
+  const label = isPlaying ? '⏭ Queued' : '▶ Playing';
+  const text = `${label}: ${title} — ${artist}`;
+  if (isPlaying) await replyAndDelete(message, text, 3000);
+  else await reply(message, text);
+}
 
 function formatStreamError(reason: string | undefined, primary: string | undefined): string {
   switch (reason) {
@@ -39,33 +67,33 @@ export async function queueTrack(
     return;
   }
 
+  // DeaDBeeF can't reliably stream remote audio over HTTP, so (when enabled)
+  // download to a local cache file and play that instead of the URL. Disabled
+  // for backends that stream fine (e.g. foobar2000) via STREAM_DOWNLOAD=off.
+  let playPath = url;
+  if (CONFIG.STREAM_DOWNLOAD) {
+    try {
+      playPath = await cacheStream(url, `t${result.tidalId}`);
+    } catch (err) {
+      await reply(message, `Couldn't download that track for playback: ${err instanceof Error ? err.message : String(err)}`);
+      return;
+    }
+  }
+
   try {
-    const [playlists, state] = await Promise.all([
-      ctx.player.getPlaylists(),
-      ctx.player.getPlayerState(),
-    ]);
-    const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
-    if (!playlist) throw new Error('No playlists exist in the player');
-    const isPlaying = state.playbackState === 'playing';
-    const currentIndex = state.activeItem?.index ?? -1;
-    const insertIndex = isPlaying ? currentIndex + 1 + getQueueEntries().length : playlist.itemCount;
-    await ctx.player.addItems(playlist.id, [url], { play: !isPlaying, index: insertIndex });
-    setTrackMeta(insertIndex, url, {
+    const { playlist, isPlaying, insertIndex } = await computePlacement(ctx);
+    await ctx.player.addItems(playlist.id, [playPath], { play: !isPlaying, index: insertIndex });
+    setTrackMeta(insertIndex, playPath, {
       title: result.title,
       artists: result.artists,
       isrc: result.isrc,
       albumArtUrl: result.albumArtUrl,
+      sourceUrl: `https://tidal.com/browse/track/${result.tidalId}`,
     });
     if (isPlaying) {
       appendToQueue({ tidalId: result.tidalId, isrc: result.isrc, title: result.title, artists: result.artists });
     }
-    const artist = result.artists[0] ?? 'Unknown';
-    const label = isPlaying ? '⏭ Queued' : '▶ Playing';
-    if (isPlaying) {
-      await replyAndDelete(message, `${label}: ${result.title} — ${artist}`, 3000);
-    } else {
-      await reply(message, `${label}: ${result.title} — ${artist}`);
-    }
+    await announcePlacement(message, isPlaying, result.title, result.artists[0] ?? 'Unknown');
   } catch (err) {
     await reply(message, `Failed to queue track: ${err instanceof Error ? err.message : String(err)}`);
   }
@@ -98,32 +126,18 @@ export const playCommand: CommandHandler = async (message, args, ctx) => {
     if (local) {
       consumeLocalMessage(message.userId)?.delete().catch(() => {});
       try {
-        const [playlists, state] = await Promise.all([
-          ctx.player.getPlaylists(),
-          ctx.player.getPlayerState(),
-        ]);
-        const playlist = playlists.find(p => p.isCurrent) ?? playlists[0];
-        if (!playlist) throw new Error('No playlists exist in the player');
-        const isPlaying = state.playbackState === 'playing';
-        const currentIndex = state.activeItem?.index ?? -1;
-        const targetIndex = isPlaying ? currentIndex + 1 + getQueueEntries().length : playlist.itemCount;
-        await ctx.player.copyItems(local.playlistId, [local.index], targetIndex);
-        setTrackMeta(targetIndex, local.path, {
+        const { playlist, isPlaying, insertIndex } = await computePlacement(ctx);
+        await ctx.player.copyItems(local.playlistId, [local.index], insertIndex);
+        setTrackMeta(insertIndex, local.path, {
           title: local.title,
           artists: [local.artist],
         });
         if (!isPlaying) {
-          await ctx.player.playItem(playlist.id, targetIndex);
-        }
-        if (isPlaying) {
+          await ctx.player.playItem(playlist.id, insertIndex);
+        } else {
           appendToQueue({ title: local.title, artists: [local.artist], local: true });
         }
-        const label = isPlaying ? '⏭ Queued' : '▶ Playing';
-        if (isPlaying) {
-          await replyAndDelete(message, `${label}: ${local.title} — ${local.artist}`, 3000);
-        } else {
-          await reply(message, `${label}: ${local.title} — ${local.artist}`);
-        }
+        await announcePlacement(message, isPlaying, local.title, local.artist);
       } catch (err) {
         await reply(message, `Failed to queue local track: ${err instanceof Error ? err.message : String(err)}`);
       }

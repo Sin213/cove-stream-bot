@@ -6,6 +6,7 @@ export interface TrackMeta {
   artists: string[];
   isrc?: string;
   albumArtUrl?: string;
+  sourceUrl?: string;
 }
 
 interface StoredEntry {

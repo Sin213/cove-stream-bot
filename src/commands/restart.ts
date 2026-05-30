@@ -3,7 +3,7 @@ import { reply } from '../discord/commands.js';
 
 export const restartCommand: CommandHandler = async (message, _args, ctx) => {
   const state = await ctx.player.getPlayerState();
-  if (state.playbackState === 'stopped' || state.activeItem?.index < 0) {
+  if (state.playbackState === 'stopped' || (state.activeItem?.index ?? -1) < 0) {
     await reply(message, 'Nothing is currently playing.');
     return;
   }

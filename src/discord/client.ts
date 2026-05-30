@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, ActivityType } from 'discord.js';
+import { Client, GatewayIntentBits, ActivityType, Partials } from 'discord.js';
 
 export function createDiscordClient(): Client {
   const client = new Client({
@@ -9,6 +9,9 @@ export function createDiscordClient(): Client {
       GatewayIntentBits.MessageContent,
       GatewayIntentBits.GuildMessageReactions,
     ],
+    // Without these, reaction events on messages that aren't in the cache
+    // (e.g. an older vote-skip message) are silently dropped.
+    partials: [Partials.Message, Partials.Channel, Partials.Reaction],
   });
 
   client.once('ready', () => {
